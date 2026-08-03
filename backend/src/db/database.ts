@@ -32,6 +32,7 @@ export async function getDb(): Promise<Database> {
       errorRate INTEGER NOT NULL DEFAULT 0,
       schema TEXT NOT NULL,
       staticResponse TEXT,
+      fieldOverrides TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -56,6 +57,13 @@ export async function getDb(): Promise<Database> {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migration de seguranca caso a coluna fieldOverrides nao exista em bancos antigos
+  try {
+    await dbInstance.exec(`ALTER TABLE endpoints ADD COLUMN fieldOverrides TEXT`);
+  } catch (e) {
+    // Coluna ja existe
+  }
 
   console.log('✅ SQLite Database initialized at:', dbPath);
   return dbInstance;

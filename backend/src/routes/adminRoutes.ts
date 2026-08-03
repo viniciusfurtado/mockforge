@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { getDb } from '../db/database';
-import { generateMockFromTemplate, parseUserSchema } from '../engine/mockGenerator';
+import { generateMockFromTemplate, parseUserSchema, extractFieldsFromSchema } from '../engine/mockGenerator';
 import { randomUUID } from 'crypto';
 
 export async function adminRoutes(fastify: FastifyInstance) {
@@ -34,7 +34,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
       delayMs = 0,
       errorRate = 0,
       schema,
-      staticResponse = ''
+      staticResponse = '',
+      fieldOverrides = {}
     } = body;
 
     if (!name || !path || !schema) {
@@ -43,10 +44,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const schemaString = typeof schema === 'string' ? schema : JSON.stringify(schema, null, 2);
+    const overridesString = typeof fieldOverrides === 'string' ? fieldOverrides : JSON.stringify(fieldOverrides);
 
     await db.run(`
-      INSERT INTO endpoints (id, name, path, method, mode, statusCode, delayMs, errorRate, schema, staticResponse)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO endpoints (id, name, path, method, mode, statusCode, delayMs, errorRate, schema, staticResponse, fieldOverrides)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       name,
@@ -57,7 +59,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
       Number(delayMs),
       Number(errorRate),
       schemaString,
-      typeof staticResponse === 'string' ? staticResponse : JSON.stringify(staticResponse)
+      typeof staticResponse === 'string' ? staticResponse : JSON.stringify(staticResponse),
+      overridesString
     ]);
 
     const created = await db.get('SELECT * FROM endpoints WHERE id = ?', [id]);
@@ -82,15 +85,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
       delayMs = existing.delayMs,
       errorRate = existing.errorRate,
       schema = existing.schema,
-      staticResponse = existing.staticResponse
+      staticResponse = existing.staticResponse,
+      fieldOverrides = existing.fieldOverrides
     } = body;
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const schemaString = typeof schema === 'string' ? schema : JSON.stringify(schema, null, 2);
+    const overridesString = typeof fieldOverrides === 'string' ? fieldOverrides : JSON.stringify(fieldOverrides);
 
     await db.run(`
       UPDATE endpoints
-      SET name = ?, path = ?, method = ?, mode = ?, statusCode = ?, delayMs = ?, errorRate = ?, schema = ?, staticResponse = ?, updatedAt = CURRENT_TIMESTAMP
+      SET name = ?, path = ?, method = ?, mode = ?, statusCode = ?, delayMs = ?, errorRate = ?, schema = ?, staticResponse = ?, fieldOverrides = ?, updatedAt = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
       name,
@@ -102,6 +107,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       Number(errorRate),
       schemaString,
       typeof staticResponse === 'string' ? staticResponse : JSON.stringify(staticResponse),
+      overridesString,
       id
     ]);
 
@@ -118,6 +124,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.send({ success: true, message: 'Endpoint removido.' });
   });
 
+  // Extrair lista plana de campos a partir do Schema para montar a interface visual de Overrides
+  fastify.post('/_admin/extract-fields', async (request, reply) => {
+    const { schema } = request.body as any;
+    if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
+
+    const parsed = parseUserSchema(schema);
+    const fields = extractFieldsFromSchema(parsed);
+    return reply.send(fields);
+  });
+
   // Resetar estado de um endpoint Stateful
   fastify.post('/_admin/endpoints/:id/reset-state', async (request, reply) => {
     const db = await getDb();
@@ -126,19 +142,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.send({ success: true, message: 'Massa de dados persistida foi resetada com sucesso.' });
   });
 
-  // Preview dinâmico
+  // Preview dinâmico com suporte a fieldOverrides
   fastify.post('/_admin/preview', async (request, reply) => {
-    const { schema, count = 1 } = request.body as any;
+    const { schema, count = 1, fieldOverrides = {} } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
 
     const parsed = parseUserSchema(schema);
 
     if (Number(count) > 1) {
-      const items = Array.from({ length: Number(count) }, () => generateMockFromTemplate(parsed));
+      const items = Array.from({ length: Number(count) }, () => generateMockFromTemplate(parsed, fieldOverrides));
       return reply.send(items);
     }
 
-    const mock = generateMockFromTemplate(parsed);
+    const mock = generateMockFromTemplate(parsed, fieldOverrides);
     return reply.send(mock);
   });
 

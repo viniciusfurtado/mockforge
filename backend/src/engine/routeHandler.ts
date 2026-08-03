@@ -67,6 +67,13 @@ export async function handleMockRequest(request: FastifyRequest, reply: FastifyR
   }
 
   const schemaObj = parseUserSchema(matchedEndpoint.schema);
+  let fieldOverrides = {};
+  try {
+    if (matchedEndpoint.fieldOverrides) {
+      fieldOverrides = JSON.parse(matchedEndpoint.fieldOverrides);
+    }
+  } catch (e) {}
+
   const resourceId = urlParams.id || urlParams[Object.keys(urlParams)[0]];
 
   // MODO ESTÁTICO
@@ -82,7 +89,7 @@ export async function handleMockRequest(request: FastifyRequest, reply: FastifyR
 
   // MODO DINÂMICO
   if (matchedEndpoint.mode === 'dynamic') {
-    const mockData = generateMockFromTemplate(schemaObj);
+    const mockData = generateMockFromTemplate(schemaObj, fieldOverrides);
     return reply.status(matchedEndpoint.statusCode).send(mockData);
   }
 
@@ -121,7 +128,7 @@ export async function handleMockRequest(request: FastifyRequest, reply: FastifyR
         const initialCount = 5;
         const initialItems: any[] = [];
         for (let i = 0; i < initialCount; i++) {
-          const item = generateMockFromTemplate(Array.isArray(schemaObj) ? schemaObj[0] : schemaObj);
+          const item = generateMockFromTemplate(Array.isArray(schemaObj) ? schemaObj[0] : schemaObj, fieldOverrides);
           if (!item.id) item.id = randomUUID();
 
           await db.run(`
@@ -170,5 +177,5 @@ export async function handleMockRequest(request: FastifyRequest, reply: FastifyR
     }
   }
 
-  return reply.status(matchedEndpoint.statusCode).send(generateMockFromTemplate(schemaObj));
+  return reply.status(matchedEndpoint.statusCode).send(generateMockFromTemplate(schemaObj, fieldOverrides));
 }

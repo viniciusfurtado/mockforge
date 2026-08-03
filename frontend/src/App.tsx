@@ -13,11 +13,9 @@ import {
   Clock,
   AlertTriangle,
   Terminal,
-  Search,
-  CheckCircle2,
-  XCircle,
-  Copy,
-  Server
+  Server,
+  SlidersHorizontal,
+  CheckCircle2
 } from 'lucide-react';
 
 interface Endpoint {
@@ -31,6 +29,7 @@ interface Endpoint {
   errorRate: number;
   schema: string;
   staticResponse?: string;
+  fieldOverrides?: string;
   createdAt?: string;
 }
 
@@ -51,20 +50,50 @@ interface Log {
   timestamp: string;
 }
 
-const API_BASE = ''; // Relativo para rodar perfeitamente via proxy ou mesmo host
+interface SchemaField {
+  path: string;
+  key: string;
+  sampleValue: any;
+  detectedType: string;
+}
+
+const API_BASE = '';
+
+const PRESET_OPTIONS = [
+  { value: 'auto', label: '🤖 Auto (Faker Inteligente)' },
+  { value: 'cnpj_formatted', label: '🏢 CNPJ Formatado (12.345.678/0001-90)' },
+  { value: 'cnpj_numeric', label: '🔢 CNPJ Numérico 14 Dígitos (43035146004172)' },
+  { value: 'cpf_formatted', label: '🆔 CPF Formatado (123.456.789-00)' },
+  { value: 'cpf_numeric', label: '🔢 CPF Numérico 11 Dígitos (12345678900)' },
+  { value: 'numeric_string', label: '🔢 Apenas Números em String (Ex: "734670")' },
+  { value: 'alphanumeric_code', label: '🔤 Código Alfanumérico (Ex: "PROT260731")' },
+  { value: 'uuid', label: '🔑 UUID v4 (Ex: "40904f45-f72c-46b6...")' },
+  { value: 'integer', label: '🔢 Número Inteiro (Ex: 2568)' },
+  { value: 'float', label: '💲 Número Decimal / Preço (Ex: 100.50)' },
+  { value: 'email', label: '✉️ E-mail' },
+  { value: 'full_name', label: '👤 Nome Completo' },
+  { value: 'company', label: '🏢 Nome de Empresa' },
+  { value: 'phone', label: '📞 Telefone' },
+  { value: 'date_iso', label: '📅 Data Hora ISO 8601 (2026-07-30T08:00:00Z)' },
+  { value: 'date_simple', label: '📅 Data Simples (2026-07-30)' },
+  { value: 'boolean', label: '☑️ Boolean (true / false)' }
+];
 
 export function App() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
-  const [activeTab, setActiveTab] = useState<'config' | 'schema' | 'playground' | 'logs'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'schema' | 'overrides' | 'playground' | 'logs'>('config');
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<Stats>({ totalEndpoints: 0, totalRequests: 0, simulatedErrors: 0, avgDelayMs: 0 });
   const [logs, setLogs] = useState<Log[]>([]);
 
+  // Extracted Schema Fields & Overrides
+  const [extractedFields, setExtractedFields] = useState<SchemaField[]>([]);
+  const [fieldOverridesMap, setFieldOverridesMap] = useState<Record<string, string>>({});
+
   // Preview state
   const [previewData, setPreviewData] = useState<string>('');
   const [previewCount, setPreviewCount] = useState<number>(1);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   // Playground state
   const [testMethod, setTestMethod] = useState('GET');
@@ -83,8 +112,22 @@ export function App() {
     statusCode: 200,
     delayMs: 0,
     errorRate: 0,
-    schema: JSON.stringify({ id: "uuid", name: "Exemplo", email: "teste@email.com", ativo: true }, null, 2),
-    staticResponse: '{\n  "message": "Sucesso"\n}'
+    schema: JSON.stringify({
+      cnpjEmpresa: "43035146004172",
+      senhaConexao: "40904f45-f72c-46b6-9924-1ac5d67c8e46",
+      numeroPedido: "0041PROT260731000001",
+      codigoAgenciaAtendimento: 2568,
+      codigoPostoAtendimento: 2134,
+      codigoBdnAtendimento: 1234567,
+      dataAtendimento: "2026-07-30T08:00:00.000",
+      gtve: [
+        {
+          numeroGtv: "734670",
+          valorGtv: 100
+        }
+      ]
+    }, null, 2),
+    staticResponse: '{\n  "status": "success"\n}'
   });
 
   const [notification, setNotification] = useState<string | null>(null);
@@ -139,14 +182,50 @@ export function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const extractSchemaFields = async (schemaText: string, currentOverrides?: Record<string, string>) => {
+    try {
+      const res = await fetch(`${API_BASE}/_admin/extract-fields`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schema: schemaText })
+      });
+      if (res.ok) {
+        const fields: SchemaField[] = await res.json();
+        setExtractedFields(fields);
+        if (currentOverrides) {
+          setFieldOverridesMap(currentOverrides);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao extrair campos do schema:', err);
+    }
+  };
+
   const selectEndpointItem = (ep: Endpoint) => {
     setSelectedEndpoint(ep);
     setFormData(ep);
     setTestMethod(ep.method === 'ALL' ? 'GET' : ep.method);
-    generatePreview(ep.schema);
+
+    let parsedOverrides = {};
+    try {
+      if (ep.fieldOverrides) parsedOverrides = JSON.parse(ep.fieldOverrides);
+    } catch (e) {}
+
+    setFieldOverridesMap(parsedOverrides);
+    extractSchemaFields(ep.schema, parsedOverrides);
+    generatePreview(ep.schema, previewCount, parsedOverrides);
   };
 
   const handleCreateNew = () => {
+    const newSchema = JSON.stringify({
+      id: "uuid",
+      titulo: "Exemplo de Modelo",
+      usuario: "Nome do Usuário",
+      email: "usuario@dominio.com",
+      valor: 150.75,
+      ativo: true
+    }, null, 2);
+
     const newEp: Partial<Endpoint> = {
       name: 'Novo Mock API',
       path: `/api/v1/mock-${Math.floor(Math.random() * 1000)}`,
@@ -155,21 +234,16 @@ export function App() {
       statusCode: 200,
       delayMs: 150,
       errorRate: 0,
-      schema: JSON.stringify({
-        id: "uuid",
-        titulo: "Exemplo de Modelo",
-        usuario: "Nome do Usuário",
-        email: "usuario@dominio.com",
-        valor: 150.75,
-        ativo: true,
-        criadoEm: "2026-08-03T15:00:00.000Z"
-      }, null, 2),
-      staticResponse: '{\n  "status": "success"\n}'
+      schema: newSchema,
+      staticResponse: '{\n  "status": "success"\n}',
+      fieldOverrides: '{}'
     };
     setSelectedEndpoint(null);
     setFormData(newEp);
+    setFieldOverridesMap({});
     setActiveTab('config');
-    generatePreview(newEp.schema!);
+    extractSchemaFields(newSchema, {});
+    generatePreview(newSchema, 1, {});
   };
 
   const handleSave = async () => {
@@ -184,15 +258,20 @@ export function App() {
         ? `${API_BASE}/_admin/endpoints/${selectedEndpoint.id}`
         : `${API_BASE}/_admin/endpoints`;
 
+      const payload = {
+        ...formData,
+        fieldOverrides: JSON.stringify(fieldOverridesMap)
+      };
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) throw new Error('Erro ao salvar endpoint');
       const saved = await res.json();
-      
+
       showNotification(selectedEndpoint?.id ? 'Mock atualizado com sucesso! ⚡' : 'Novo Mock criado com sucesso! 🚀');
       await fetchEndpoints();
       selectEndpointItem(saved);
@@ -225,22 +304,26 @@ export function App() {
     }
   };
 
-  const generatePreview = async (schemaToUse?: string, count: number = previewCount) => {
-    setIsLoadingPreview(true);
+  const generatePreview = async (schemaToUse?: string, count: number = previewCount, overridesToUse?: Record<string, string>) => {
     try {
       const rawSchema = schemaToUse || formData.schema;
+      const rawOverrides = overridesToUse || fieldOverridesMap;
       const res = await fetch(`${API_BASE}/_admin/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema: rawSchema, count })
+        body: JSON.stringify({ schema: rawSchema, count, fieldOverrides: rawOverrides })
       });
       const data = await res.json();
       setPreviewData(JSON.stringify(data, null, 2));
     } catch (err) {
       setPreviewData('// Erro ao gerar preview do modelo');
-    } finally {
-      setIsLoadingPreview(false);
     }
+  };
+
+  const updateFieldOverride = (fieldPath: string, preset: string) => {
+    const updated = { ...fieldOverridesMap, [fieldPath]: preset };
+    setFieldOverridesMap(updated);
+    generatePreview(formData.schema, previewCount, updated);
   };
 
   const executeTestRequest = async () => {
@@ -366,7 +449,7 @@ export function App() {
           {notification && (
             <div style={{
               position: 'absolute',
-              top: '75px',
+              top: '70px',
               right: '24px',
               background: 'linear-gradient(135deg, #10B981, #059669)',
               color: 'white',
@@ -397,7 +480,13 @@ export function App() {
               className={`tab-btn ${activeTab === 'schema' ? 'active' : ''}`}
               onClick={() => setActiveTab('schema')}
             >
-              <Code2 size={16} /> Modelo & Faker Schema
+              <Code2 size={16} /> Modelo JSON & Schema
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'overrides' ? 'active' : ''}`}
+              onClick={() => setActiveTab('overrides')}
+            >
+              <SlidersHorizontal size={16} /> 🎯 Tipagem & Overrides de Campos
             </button>
             <button
               className={`tab-btn ${activeTab === 'playground' ? 'active' : ''}`}
@@ -412,19 +501,19 @@ export function App() {
               <Terminal size={16} /> Telemetria & Logs
             </button>
 
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
               {selectedEndpoint?.mode === 'stateful' && (
-                <button className="btn-secondary" onClick={handleResetState} title="Limpa a tabela SQLite deste endpoint">
-                  <RotateCcw size={15} /> Resetar Dados
+                <button className="btn-secondary btn-sm" onClick={handleResetState} title="Limpa a tabela SQLite deste endpoint">
+                  <RotateCcw size={14} /> Resetar Dados
                 </button>
               )}
               {selectedEndpoint && (
-                <button className="btn-secondary" onClick={handleDelete} style={{ color: '#EF4444' }}>
-                  <Trash2 size={15} /> Apagar
+                <button className="btn-secondary btn-sm" onClick={handleDelete} style={{ color: '#EF4444' }}>
+                  <Trash2 size={14} /> Apagar
                 </button>
               )}
-              <button className="btn-primary" onClick={handleSave}>
-                <Save size={16} /> Salvar Mock
+              <button className="btn-primary btn-sm" onClick={handleSave}>
+                <Save size={14} /> Salvar Mock
               </button>
             </div>
           </div>
@@ -506,9 +595,9 @@ export function App() {
                   </div>
                 </div>
 
-                <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
+                <hr style={{ borderColor: 'var(--border-color)', margin: '8px 0' }} />
 
-                <h4 className="card-title" style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                <h4 className="card-title" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   ⚡ Simulação de Latência e Resiliência (Caos)
                 </h4>
 
@@ -544,46 +633,48 @@ export function App() {
 
             {/* TAB: SCHEMA & PREVIEW */}
             {activeTab === 'schema' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', flex: 1, minHeight: '500px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', flex: 1, minHeight: '500px' }}>
                 {/* Lado Esquerdo: Editor Monaco do Modelo */}
                 <div className="card-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 className="card-title"><Code2 size={18} /> Modelo / Estrutura da Classe</h3>
-                    <button className="btn-secondary" onClick={() => generatePreview(formData.schema)}>
-                      <RotateCcw size={14} /> Atualizar Preview
+                    <button className="btn-secondary btn-sm" onClick={() => generatePreview(formData.schema)}>
+                      <RotateCcw size={13} /> Atualizar Preview
                     </button>
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Cole o modelo da documentação (JSON Exemplo ou Estrutura). O MockForge infere automaticamente os campos (email, cpf, datas, nomes, preços) e gera dados realistas via Faker.
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Cole o modelo da documentação. O MockForge infere os tipos automaticamente.
                   </p>
-                  <div style={{ flex: 1, minHeight: '400px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, minHeight: '380px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                     <Editor
                       height="100%"
                       defaultLanguage="json"
                       theme="vs-dark"
                       value={formData.schema || ''}
                       onChange={(val) => {
-                        setFormData({ ...formData, schema: val || '' });
+                        const newSchema = val || '';
+                        setFormData({ ...formData, schema: newSchema });
+                        extractSchemaFields(newSchema, fieldOverridesMap);
                       }}
                       options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
                     />
                   </div>
                 </div>
 
-                {/* Lado Direito: Live Preview dos Dados Gerados */}
+                {/* Lado Direito: Live Preview */}
                 <div className="card-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 className="card-title"><Zap size={18} /> Visualização da Massa de Dados (Preview)</h3>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Qtde:</span>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Qtde:</span>
                       <button className="btn-secondary btn-sm" onClick={() => { setPreviewCount(1); generatePreview(formData.schema, 1); }}>1</button>
                       <button className="btn-secondary btn-sm" onClick={() => { setPreviewCount(5); generatePreview(formData.schema, 5); }}>5</button>
                     </div>
                   </div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Massa de dados que será devolvida pelo servidor para o aplicativo cliente.
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Massa de dados que será devolvida pelo servidor para a aplicação cliente.
                   </p>
-                  <div style={{ flex: 1, minHeight: '400px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, minHeight: '380px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                     <Editor
                       height="100%"
                       defaultLanguage="json"
@@ -596,6 +687,78 @@ export function App() {
               </div>
             )}
 
+            {/* TAB: OVERRIDES & TIPAGEM DE CAMPOS */}
+            {activeTab === 'overrides' && (
+              <div className="card-panel">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 className="card-title"><SlidersHorizontal size={18} /> 🎯 Mapeador & Ajuste Fino de Tipagem de Campos</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Defina exatamente o formato e gerador de cada campo extraído do seu modelo. (Ex: Altere "cnpjEmpresa" para CNPJ Formatado ou "numeroGtv" para Apenas Números em String).
+                    </p>
+                  </div>
+                  <button className="btn-secondary btn-sm" onClick={() => extractSchemaFields(formData.schema!, fieldOverridesMap)}>
+                    <RotateCcw size={13} /> Re-extrair Campos
+                  </button>
+                </div>
+
+                <div style={{ overflowX: 'auto', marginTop: '12px' }}>
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>Caminho do Campo (Field Path)</th>
+                        <th>Tipo no Exemplo</th>
+                        <th>Gerador / Preset Selecionado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {extractedFields.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                            Nenhum campo estruturado detectado no modelo JSON. Cole uma estrutura válida na aba "Modelo JSON & Schema".
+                          </td>
+                        </tr>
+                      ) : (
+                        extractedFields.map((field) => (
+                          <tr key={field.path}>
+                            <td className="font-mono" style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+                              {field.path}
+                            </td>
+                            <td>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: 'rgba(51, 65, 85, 0.5)',
+                                color: 'var(--accent-cyan)',
+                                fontFamily: 'monospace'
+                              }}>
+                                {field.detectedType}
+                              </span>
+                            </td>
+                            <td>
+                              <select
+                                className="form-control"
+                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                value={fieldOverridesMap[field.path] || 'auto'}
+                                onChange={(e) => updateFieldOverride(field.path, e.target.value)}
+                              >
+                                {PRESET_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* TAB: PLAYGROUND (TESTADOR INTEGRADO) */}
             {activeTab === 'playground' && (
               <div className="card-panel">
@@ -604,7 +767,7 @@ export function App() {
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <select
                     className="form-control"
-                    style={{ width: '130px', fontWeight: 'bold' }}
+                    style={{ width: '120px', fontWeight: 'bold' }}
                     value={testMethod}
                     onChange={(e) => setTestMethod(e.target.value)}
                   >
@@ -623,15 +786,15 @@ export function App() {
                     readOnly
                   />
 
-                  <button className="btn-primary" onClick={executeTestRequest} disabled={isTesting}>
+                  <button className="btn-primary btn-sm" onClick={executeTestRequest} disabled={isTesting}>
                     {isTesting ? 'Enviando...' : 'Disparar Request 🚀'}
                   </button>
                 </div>
 
                 {['POST', 'PUT', 'PATCH'].includes(testMethod) && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Payload da Requisição (Request Body JSON)</label>
-                    <div style={{ height: '160px', border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Payload da Requisição (Request Body JSON)</label>
+                    <div style={{ height: '140px', border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
                       <Editor
                         height="100%"
                         defaultLanguage="json"
@@ -644,19 +807,19 @@ export function App() {
                   </div>
                 )}
 
-                <hr style={{ borderColor: 'var(--border-color)', margin: '16px 0' }} />
+                <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Resposta do Servidor (Response)</h4>
+                  <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Resposta do Servidor (Response)</h4>
                   {testStatus !== null && (
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '0.85rem' }}>
+                    <div style={{ display: 'flex', gap: '10px', fontSize: '0.8rem' }}>
                       <span>Status: <strong style={{ color: testStatus < 300 ? '#10B981' : '#EF4444' }}>{testStatus}</strong></span>
                       <span>Tempo: <strong>{testTime} ms</strong></span>
                     </div>
                   )}
                 </div>
 
-                <div style={{ height: '300px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ height: '260px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
                     defaultLanguage="json"
@@ -673,8 +836,8 @@ export function App() {
               <div className="card-panel">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 className="card-title"><Terminal size={18} /> Historico de Chamadas em Tempo Real</h3>
-                  <button className="btn-secondary" onClick={fetchLogs}>
-                    <RotateCcw size={14} /> Atualizar Logs
+                  <button className="btn-secondary btn-sm" onClick={fetchLogs}>
+                    <RotateCcw size={13} /> Atualizar Logs
                   </button>
                 </div>
 
