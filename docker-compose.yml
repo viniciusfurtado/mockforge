@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  mockforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mockforge
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DB_PATH=/app/data/mockforge.db
+    volumes:
+      - ./data:/app/data
