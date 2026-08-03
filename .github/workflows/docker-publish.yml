@@ -6,6 +6,7 @@ on:
     tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_dispatch: # Permite disparar manualmente via botão no GitHub
 
 env:
   GHCR_REGISTRY: ghcr.io
