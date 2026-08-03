@@ -343,6 +343,25 @@ export function App() {
     }
   };
 
+  const handleClearLogs = async () => {
+    const epId = selectedEndpoint?.id;
+    const confirmMsg = epId
+      ? `Deseja realmente limpar os logs do mock "${selectedEndpoint.name}"?`
+      : 'Deseja realmente limpar TODOS os logs de telemetria?';
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const url = epId ? `${API_BASE}/_admin/logs?endpointId=${epId}` : `${API_BASE}/_admin/logs`;
+      await fetch(url, { method: 'DELETE' });
+      showNotification('Logs de telemetria limpos com sucesso! 🧹');
+      await fetchLogs();
+      await fetchStats();
+    } catch (err: any) {
+      showNotification(`Erro ao limpar logs: ${err.message}`);
+    }
+  };
+
   const executeTestRequest = async () => {
     if (!formData.path) return;
     setIsTesting(true);
@@ -902,6 +921,9 @@ export function App() {
 
                     <button className="btn-secondary btn-sm" onClick={fetchLogs}>
                       <RotateCcw size={13} /> Atualizar Logs
+                    </button>
+                    <button className="btn-secondary btn-sm" onClick={handleClearLogs} style={{ color: '#EF4444' }} title="Limpar histórico de requisições">
+                      <Trash2 size={13} /> Limpar Logs
                     </button>
                   </div>
                 </div>

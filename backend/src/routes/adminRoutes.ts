@@ -175,7 +175,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // Logs com filtro opcional de endpointId
+  // Logs
   fastify.get('/_admin/logs', async (request, reply) => {
     const db = await getDb();
     const { endpointId } = request.query as any;
@@ -187,5 +187,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     const logs = await db.all('SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT 50');
     return logs;
+  });
+
+  // Limpar Logs
+  fastify.delete('/_admin/logs', async (request, reply) => {
+    const db = await getDb();
+    const { endpointId } = request.query as any;
+
+    if (endpointId) {
+      await db.run('DELETE FROM request_logs WHERE endpointId = ?', [endpointId]);
+      return reply.send({ success: true, message: 'Logs do endpoint limpos com sucesso.' });
+    }
+
+    await db.run('DELETE FROM request_logs');
+    return reply.send({ success: true, message: 'Todos os logs de telemetria foram limpos.' });
   });
 }
