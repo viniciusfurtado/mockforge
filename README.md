@@ -51,7 +51,34 @@ flowchart TD
 
 ## 📦 Como Executar
 
-### 1. Usando a imagem pré-compilada do GHCR (Mais Rápido)
+### 1. Direct Pull do Docker Hub (Recomendado para Portainer / Production)
+
+```bash
+docker run -d \
+  -p 3001:3001 \
+  -v $(pwd)/data:/app/data \
+  --name mockforge \
+  devfurtado/mockforge:latest
+```
+
+Ou no **Portainer Stack / Docker Compose**:
+```yaml
+version: '3.8'
+
+services:
+  mockforge:
+    image: devfurtado/mockforge:latest
+    container_name: mockforge
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data
+```
+
+---
+
+### 2. Usando a imagem do GHCR
 
 ```bash
 docker run -d \
