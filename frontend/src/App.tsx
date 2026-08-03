@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   Layers,
@@ -15,7 +15,11 @@ import {
   Terminal,
   Server,
   SlidersHorizontal,
-  CheckCircle2
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
 
 interface Endpoint {
@@ -86,6 +90,12 @@ export function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<Stats>({ totalEndpoints: 0, totalRequests: 0, simulatedErrors: 0, avgDelayMs: 0 });
   const [logs, setLogs] = useState<Log[]>([]);
+
+  // UI State: Sidebar Collapsed
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Scroll Ref for Tabs
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
 
   // Extracted Schema Fields & Overrides
   const [extractedFields, setExtractedFields] = useState<SchemaField[]>([]);
@@ -326,6 +336,13 @@ export function App() {
     generatePreview(formData.schema, previewCount, updated);
   };
 
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (tabsScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -180 : 180;
+      tabsScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
   const executeTestRequest = async () => {
     if (!formData.path) return;
     setIsTesting(true);
@@ -366,27 +383,35 @@ export function App() {
       {/* Header */}
       <header className="header">
         <div className="logo-area">
+          <button
+            className="btn-icon"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            title={isSidebarCollapsed ? "Expandir lista de mocks" : "Colapsar lista de mocks"}
+          >
+            {isSidebarCollapsed ? <PanelLeft size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+
           <div className="logo-icon">
-            <Zap size={22} />
+            <Zap size={20} />
           </div>
           <span className="logo-title">MockForge Engine</span>
         </div>
 
         <div className="stats-bar">
           <div className="stat-pill">
-            <Layers size={15} />
+            <Layers size={14} />
             <span>Mocks: <strong>{stats.totalEndpoints}</strong></span>
           </div>
           <div className="stat-pill">
-            <Activity size={15} />
+            <Activity size={14} />
             <span>Requisições: <strong>{stats.totalRequests}</strong></span>
           </div>
           <div className="stat-pill">
-            <Clock size={15} />
+            <Clock size={14} />
             <span>Latência Média: <strong>{stats.avgDelayMs}ms</strong></span>
           </div>
           <div className="stat-pill">
-            <AlertTriangle size={15} style={{ color: stats.simulatedErrors > 0 ? '#EF4444' : undefined }} />
+            <AlertTriangle size={14} style={{ color: stats.simulatedErrors > 0 ? '#EF4444' : undefined }} />
             <span>Erros Simulações: <strong>{stats.simulatedErrors}</strong></span>
           </div>
         </div>
@@ -394,10 +419,10 @@ export function App() {
 
       {/* Main Layout */}
       <div className="main-layout">
-        {/* Sidebar */}
-        <aside className="sidebar">
+        {/* Sidebar Collapsible */}
+        <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="sidebar-header">
-            <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <input
                 type="text"
                 placeholder="Buscar rota ou nome..."
@@ -407,7 +432,7 @@ export function App() {
               />
             </div>
             <button className="btn-primary" onClick={handleCreateNew}>
-              <Plus size={18} />
+              <Plus size={16} />
               <span>Novo Mock</span>
             </button>
           </div>
@@ -449,7 +474,7 @@ export function App() {
           {notification && (
             <div style={{
               position: 'absolute',
-              top: '70px',
+              top: '60px',
               right: '24px',
               background: 'linear-gradient(135deg, #10B981, #059669)',
               color: 'white',
@@ -458,62 +483,72 @@ export function App() {
               boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
               zIndex: 100,
               fontWeight: 600,
-              fontSize: '0.9rem',
+              fontSize: '0.85rem',
               display: 'flex',
               alignItems: 'center',
               gap: '8px'
             }}>
-              <CheckCircle2 size={18} />
+              <CheckCircle2 size={17} />
               {notification}
             </div>
           )}
 
-          {/* Navigation Tabs */}
-          <div className="tabs-bar">
-            <button
-              className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
-              onClick={() => setActiveTab('config')}
-            >
-              <Server size={16} /> Configurações
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'schema' ? 'active' : ''}`}
-              onClick={() => setActiveTab('schema')}
-            >
-              <Code2 size={16} /> Modelo JSON & Schema
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'overrides' ? 'active' : ''}`}
-              onClick={() => setActiveTab('overrides')}
-            >
-              <SlidersHorizontal size={16} /> Tipagem & Overrides de Campos
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'playground' ? 'active' : ''}`}
-              onClick={() => setActiveTab('playground')}
-            >
-              <Play size={16} /> Testador (Playground)
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
-              onClick={() => setActiveTab('logs')}
-            >
-              <Terminal size={16} /> Telemetria & Logs
+          {/* Navigation Tabs Bar with Navigation Arrows */}
+          <div className="tabs-container">
+            <button className="tab-nav-arrow" onClick={() => scrollTabs('left')} title="Rolar abas para esquerda">
+              <ChevronLeft size={16} />
             </button>
 
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+            <div className="tabs-scroll-area" ref={tabsScrollRef}>
+              <button
+                className={`tab-btn ${activeTab === 'config' ? 'active' : ''}`}
+                onClick={() => setActiveTab('config')}
+              >
+                <Server size={15} /> Configurações
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'schema' ? 'active' : ''}`}
+                onClick={() => setActiveTab('schema')}
+              >
+                <Code2 size={15} /> Modelo JSON & Schema
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'overrides' ? 'active' : ''}`}
+                onClick={() => setActiveTab('overrides')}
+              >
+                <SlidersHorizontal size={15} /> Tipagem & Overrides de Campos
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'playground' ? 'active' : ''}`}
+                onClick={() => setActiveTab('playground')}
+              >
+                <Play size={15} /> Testador (Playground)
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
+                onClick={() => setActiveTab('logs')}
+              >
+                <Terminal size={15} /> Telemetria & Logs
+              </button>
+            </div>
+
+            <button className="tab-nav-arrow" onClick={() => scrollTabs('right')} title="Rolar abas para direita">
+              <ChevronRight size={16} />
+            </button>
+
+            <div style={{ display: 'flex', gap: '6px', marginLeft: '6px' }}>
               {selectedEndpoint?.mode === 'stateful' && (
                 <button className="btn-secondary btn-sm" onClick={handleResetState} title="Limpa a tabela SQLite deste endpoint">
-                  <RotateCcw size={14} /> Resetar Dados
+                  <RotateCcw size={13} /> Resetar Dados
                 </button>
               )}
               {selectedEndpoint && (
                 <button className="btn-secondary btn-sm" onClick={handleDelete} style={{ color: '#EF4444' }}>
-                  <Trash2 size={14} /> Apagar
+                  <Trash2 size={13} /> Apagar
                 </button>
               )}
               <button className="btn-primary btn-sm" onClick={handleSave}>
-                <Save size={14} /> Salvar Mock
+                <Save size={13} /> Salvar Mock
               </button>
             </div>
           </div>
@@ -523,7 +558,7 @@ export function App() {
             {/* TAB: CONFIGURAÇÕES */}
             {activeTab === 'config' && (
               <div className="card-panel">
-                <h3 className="card-title"><Server size={18} /> Definições da Rota Mock</h3>
+                <h3 className="card-title"><Server size={17} /> Definições da Rota Mock</h3>
 
                 <div className="form-grid">
                   <div className="form-group">
@@ -595,9 +630,9 @@ export function App() {
                   </div>
                 </div>
 
-                <hr style={{ borderColor: 'var(--border-color)', margin: '8px 0' }} />
+                <hr style={{ borderColor: 'var(--border-color)', margin: '6px 0' }} />
 
-                <h4 className="card-title" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                <h4 className="card-title" style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
                   ⚡ Simulação de Latência e Resiliência (Caos)
                 </h4>
 
@@ -633,11 +668,11 @@ export function App() {
 
             {/* TAB: SCHEMA & PREVIEW */}
             {activeTab === 'schema' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', flex: 1, minHeight: '500px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', flex: 1, minHeight: '480px' }}>
                 {/* Lado Esquerdo: Editor Monaco do Modelo */}
                 <div className="card-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 className="card-title"><Code2 size={18} /> Modelo / Estrutura da Classe</h3>
+                    <h3 className="card-title"><Code2 size={17} /> Modelo / Estrutura da Classe</h3>
                     <button className="btn-secondary btn-sm" onClick={() => generatePreview(formData.schema)}>
                       <RotateCcw size={13} /> Atualizar Preview
                     </button>
@@ -645,7 +680,7 @@ export function App() {
                   <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                     Cole o modelo da documentação. O MockForge infere os tipos automaticamente.
                   </p>
-                  <div style={{ flex: 1, minHeight: '380px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, minHeight: '360px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                     <Editor
                       height="100%"
                       defaultLanguage="json"
@@ -664,7 +699,7 @@ export function App() {
                 {/* Lado Direito: Live Preview */}
                 <div className="card-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 className="card-title"><Zap size={18} /> Visualização da Massa de Dados (Preview)</h3>
+                    <h3 className="card-title"><Zap size={17} /> Visualização da Massa de Dados (Preview)</h3>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Qtde:</span>
                       <button className="btn-secondary btn-sm" onClick={() => { setPreviewCount(1); generatePreview(formData.schema, 1); }}>1</button>
@@ -674,7 +709,7 @@ export function App() {
                   <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                     Massa de dados que será devolvida pelo servidor para a aplicação cliente.
                   </p>
-                  <div style={{ flex: 1, minHeight: '380px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div style={{ flex: 1, minHeight: '360px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                     <Editor
                       height="100%"
                       defaultLanguage="json"
@@ -692,8 +727,8 @@ export function App() {
               <div className="card-panel">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 className="card-title"><SlidersHorizontal size={18} /> Mapeador & Ajuste Fino de Tipagem de Campos</h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    <h3 className="card-title"><SlidersHorizontal size={17} /> Mapeador & Ajuste Fino de Tipagem de Campos</h3>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                       Defina exatamente o formato e gerador de cada campo extraído do seu modelo. (Ex: Altere "cnpjEmpresa" para CNPJ Formatado ou "numeroGtv" para Apenas Números em String).
                     </p>
                   </div>
@@ -702,7 +737,7 @@ export function App() {
                   </button>
                 </div>
 
-                <div style={{ overflowX: 'auto', marginTop: '12px' }}>
+                <div style={{ overflowX: 'auto', marginTop: '10px' }}>
                   <table className="logs-table">
                     <thead>
                       <tr>
@@ -714,7 +749,7 @@ export function App() {
                     <tbody>
                       {extractedFields.length === 0 ? (
                         <tr>
-                          <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                          <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>
                             Nenhum campo estruturado detectado no modelo JSON. Cole uma estrutura válida na aba "Modelo JSON & Schema".
                           </td>
                         </tr>
@@ -726,8 +761,8 @@ export function App() {
                             </td>
                             <td>
                               <span style={{
-                                fontSize: '0.72rem',
-                                padding: '2px 8px',
+                                fontSize: '0.7rem',
+                                padding: '2px 7px',
                                 borderRadius: '4px',
                                 background: 'rgba(51, 65, 85, 0.5)',
                                 color: 'var(--accent-cyan)',
@@ -739,7 +774,7 @@ export function App() {
                             <td>
                               <select
                                 className="form-control"
-                                style={{ height: '32px', fontSize: '0.8rem' }}
+                                style={{ height: '30px', fontSize: '0.78rem' }}
                                 value={fieldOverridesMap[field.path] || 'auto'}
                                 onChange={(e) => updateFieldOverride(field.path, e.target.value)}
                               >
@@ -762,7 +797,7 @@ export function App() {
             {/* TAB: PLAYGROUND (TESTADOR INTEGRADO) */}
             {activeTab === 'playground' && (
               <div className="card-panel">
-                <h3 className="card-title"><Play size={18} /> Testador de API (Playground estilo Postman)</h3>
+                <h3 className="card-title"><Play size={17} /> Testador de API (Playground estilo Postman)</h3>
 
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <select
@@ -792,9 +827,9 @@ export function App() {
                 </div>
 
                 {['POST', 'PUT', 'PATCH'].includes(testMethod) && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
-                    <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Payload da Requisição (Request Body JSON)</label>
-                    <div style={{ height: '140px', border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Payload da Requisição (Request Body JSON)</label>
+                    <div style={{ height: '130px', border: '1px solid var(--border-color)', borderRadius: '6px', overflow: 'hidden' }}>
                       <Editor
                         height="100%"
                         defaultLanguage="json"
@@ -807,19 +842,19 @@ export function App() {
                   </div>
                 )}
 
-                <hr style={{ borderColor: 'var(--border-color)', margin: '12px 0' }} />
+                <hr style={{ borderColor: 'var(--border-color)', margin: '10px 0' }} />
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Resposta do Servidor (Response)</h4>
+                  <h4 style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>Resposta do Servidor (Response)</h4>
                   {testStatus !== null && (
-                    <div style={{ display: 'flex', gap: '10px', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '10px', fontSize: '0.78rem' }}>
                       <span>Status: <strong style={{ color: testStatus < 300 ? '#10B981' : '#EF4444' }}>{testStatus}</strong></span>
                       <span>Tempo: <strong>{testTime} ms</strong></span>
                     </div>
                   )}
                 </div>
 
-                <div style={{ height: '260px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ height: '240px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
                     defaultLanguage="json"
@@ -835,7 +870,7 @@ export function App() {
             {activeTab === 'logs' && (
               <div className="card-panel">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className="card-title"><Terminal size={18} /> Historico de Chamadas em Tempo Real</h3>
+                  <h3 className="card-title"><Terminal size={17} /> Historico de Chamadas em Tempo Real</h3>
                   <button className="btn-secondary btn-sm" onClick={fetchLogs}>
                     <RotateCcw size={13} /> Atualizar Logs
                   </button>
@@ -856,7 +891,7 @@ export function App() {
                     <tbody>
                       {logs.length === 0 ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>
                             Nenhum log registrado até o momento.
                           </td>
                         </tr>
