@@ -486,7 +486,7 @@ export function App() {
               className={`tab-btn ${activeTab === 'overrides' ? 'active' : ''}`}
               onClick={() => setActiveTab('overrides')}
             >
-              <SlidersHorizontal size={16} /> 🎯 Tipagem & Overrides de Campos
+              <SlidersHorizontal size={16} /> Tipagem & Overrides de Campos
             </button>
             <button
               className={`tab-btn ${activeTab === 'playground' ? 'active' : ''}`}
@@ -692,7 +692,7 @@ export function App() {
               <div className="card-panel">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3 className="card-title"><SlidersHorizontal size={18} /> 🎯 Mapeador & Ajuste Fino de Tipagem de Campos</h3>
+                    <h3 className="card-title"><SlidersHorizontal size={18} /> Mapeador & Ajuste Fino de Tipagem de Campos</h3>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                       Defina exatamente o formato e gerador de cada campo extraído do seu modelo. (Ex: Altere "cnpjEmpresa" para CNPJ Formatado ou "numeroGtv" para Apenas Números em String).
                     </p>
