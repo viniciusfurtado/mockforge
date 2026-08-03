@@ -124,7 +124,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.send({ success: true, message: 'Endpoint removido.' });
   });
 
-  // Extrair lista plana de campos a partir do Schema para montar a interface visual de Overrides
+  // Extrair campos do Schema
   fastify.post('/_admin/extract-fields', async (request, reply) => {
     const { schema } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
@@ -142,7 +142,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.send({ success: true, message: 'Massa de dados persistida foi resetada com sucesso.' });
   });
 
-  // Preview dinâmico com suporte a fieldOverrides
+  // Preview dinâmico
   fastify.post('/_admin/preview', async (request, reply) => {
     const { schema, count = 1, fieldOverrides = {} } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
@@ -175,9 +175,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
     };
   });
 
-  // Logs
-  fastify.get('/_admin/logs', async () => {
+  // Logs com filtro opcional de endpointId
+  fastify.get('/_admin/logs', async (request, reply) => {
     const db = await getDb();
+    const { endpointId } = request.query as any;
+
+    if (endpointId) {
+      const logs = await db.all('SELECT * FROM request_logs WHERE endpointId = ? ORDER BY timestamp DESC LIMIT 50', [endpointId]);
+      return logs;
+    }
+
     const logs = await db.all('SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT 50');
     return logs;
   });

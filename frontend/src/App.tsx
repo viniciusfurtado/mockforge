@@ -869,14 +869,44 @@ export function App() {
             {/* TAB: LOGS DE REQUISIÇÕES */}
             {activeTab === 'logs' && (
               <div className="card-panel">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 className="card-title"><Terminal size={17} /> Historico de Chamadas em Tempo Real</h3>
-                  <button className="btn-secondary btn-sm" onClick={fetchLogs}>
-                    <RotateCcw size={13} /> Atualizar Logs
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <h3 className="card-title"><Terminal size={17} /> Histórico de Chamadas e Telemetria</h3>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Acompanhe as requisições recebidas pelo Mock Server em tempo real.
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select
+                      className="form-control font-mono"
+                      style={{ height: '30px', fontSize: '0.78rem' }}
+                      value={selectedEndpoint?.id || ''}
+                      onChange={(e) => {
+                        const targetEp = endpoints.find(ep => ep.id === e.target.value);
+                        if (targetEp) {
+                          selectEndpointItem(targetEp);
+                        } else {
+                          setSelectedEndpoint(null);
+                          fetchLogs();
+                        }
+                      }}
+                    >
+                      <option value="">🌐 Todos os Mocks</option>
+                      {endpoints.map(ep => (
+                        <option key={ep.id} value={ep.id}>
+                          {ep.method} {ep.path} ({ep.name})
+                        </option>
+                      ))}
+                    </select>
+
+                    <button className="btn-secondary btn-sm" onClick={fetchLogs}>
+                      <RotateCcw size={13} /> Atualizar Logs
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', marginTop: '8px' }}>
                   <table className="logs-table">
                     <thead>
                       <tr>
@@ -889,35 +919,37 @@ export function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {logs.length === 0 ? (
+                      {logs.filter(log => !selectedEndpoint?.id || log.endpointId === selectedEndpoint.id).length === 0 ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>
-                            Nenhum log registrado até o momento.
+                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                            Nenhum log registrado para este filtro.
                           </td>
                         </tr>
                       ) : (
-                        logs.map((log) => (
-                          <tr key={log.id}>
-                            <td className="font-mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                            <td><span className={`method-badge ${log.method.toLowerCase()}`}>{log.method}</span></td>
-                            <td className="font-mono">{log.path}</td>
-                            <td>
-                              <span style={{ color: log.statusCode < 300 ? '#10B981' : '#EF4444', fontWeight: 600 }}>
-                                {log.statusCode}
-                              </span>
-                            </td>
-                            <td>{log.responseDelay}ms</td>
-                            <td>
-                              {log.isSimulatedError === 1 ? (
-                                <span style={{ color: '#EF4444', fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
-                                  ⚠️ Simulated Chaos
+                        logs
+                          .filter(log => !selectedEndpoint?.id || log.endpointId === selectedEndpoint.id)
+                          .map((log) => (
+                            <tr key={log.id}>
+                              <td className="font-mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                              <td><span className={`method-badge ${log.method.toLowerCase()}`}>{log.method}</span></td>
+                              <td className="font-mono">{log.path}</td>
+                              <td>
+                                <span style={{ color: log.statusCode < 300 ? '#10B981' : '#EF4444', fontWeight: 600 }}>
+                                  {log.statusCode}
                                 </span>
-                              ) : (
-                                <span style={{ color: '#10B981', fontSize: '0.75rem' }}>Success</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
+                              </td>
+                              <td>{log.responseDelay}ms</td>
+                              <td>
+                                {log.isSimulatedError === 1 ? (
+                                  <span style={{ color: '#EF4444', fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                                    ⚠️ Simulated Chaos
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#10B981', fontSize: '0.75rem' }}>Success</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
                       )}
                     </tbody>
                   </table>
