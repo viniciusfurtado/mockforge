@@ -1,57 +1,65 @@
 # 🚀 MockForge - Dynamic Mock Server Engine & Visual Dashboard
 
-[![CI/CD Docker Build](https://github.com/viniciusfurtado/mockforge/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/viniciusfurtado/mockforge/actions/workflows/docker-publish.yml)
-[![Docker Image](https://img.shields.io/badge/Docker-GHCR-blue?logo=docker)](https://github.com/viniciusfurtado/mockforge/pkgs/container/mockforge)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-**MockForge** é uma solução completa e de alta performance para simulação de APIs instáveis, em desenvolvimento ou externas. 
-Ele permite cadastrar o modelo/estrutura da sua classe ou contrato da documentação (JSON / OpenAPI / Schemas) e gera automaticamente massas de dados realistas (nomes, e-mails, UUIDs, preços, datas, etc.) via **Faker**, além de oferecer modos de persistência stateful no **SQLite** e controle fino de instabilidade (latência e caos).
+🌐 **Language / Idioma / Idioma:**
+[English](README.md) | [Português (Brasil)](README.pt-BR.md) | [Español](README.es.md)
 
 ---
 
-## 🏗️ Arquitetura
+[![CI/CD Docker Build](https://github.com/viniciusfurtado/mockforge/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/viniciusfurtado/mockforge/actions/workflows/docker-publish.yml)
+[![Docker Image](https://img.shields.io/badge/Docker-Docker%20Hub-blue?logo=docker)](https://hub.docker.com/r/devfurtado/mockforge)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**MockForge** is a complete, high-performance solution for simulating unstable, in-development, or third-party APIs.
+It takes any class or documentation contract structure (JSON / OpenAPI / Schemas) and automatically generates realistic mock datasets (names, emails, UUIDs, CPFs, CNPJs, prices, dates, codes) using **Faker**, along with **SQLite stateful persistence**, **field-level generator overrides**, and **chaos engineering** (latency & error rates).
+
+---
+
+## 🏗️ Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Container [Container Docker]
-        UI[Painel Web Admin - React + Monaco Editor]
-        API[Engine Mock Server - Fastify + TypeScript]
+    subgraph Container [Docker Container]
+        UI[Web Admin Dashboard - React + Monaco Editor]
+        API[Mock Server Engine - Fastify + TypeScript]
         DB[(SQLite Stateful Database)]
         
-        UI <-->|Gerencia Mocks & Schemas| API
-        API <-->|Persiste Mocks & Logs| DB
+        UI <-->|Manages Mocks & Overrides| API
+        API <-->|Persists Records & Telemetry Logs| DB
     end
 
-    Dev[Desenvolvedor / QA] -->|Navegador| UI
-    App[Aplicação Dev / Mobile / Frontend] -->|Chamadas HTTP GET / POST / PUT / DELETE| API
+    Dev[Developer / QA] -->|Browser| UI
+    App[Client App / Mobile / Frontend] -->|HTTP Calls GET / POST / PUT / DELETE| API
 ```
 
 ---
 
-## ✨ Principais Recursos
+## ✨ Features
 
-- **🎨 Painel Web Visual Integrado**:
-  - Editor de código estilo VS Code (**Monaco Editor**) com Syntax Highlighting.
-  - **Playground estilo Postman** integrado para disparar requisições em tempo real sem sair do navegador.
-  - Painel de telemetria com histórico e logs de requisições.
+- **🎨 Integrated Visual Web Dashboard**:
+  - Code editor with VS Code syntax highlighting (**Monaco Editor**).
+  - **Collapsible Sidebar** for maximizing workspace width.
+  - **Scrollable Tabs Navigation** with arrow controls.
+  - Built-in **Postman-style API Playground** to fire live requests directly from the UI.
+  - Real-time telemetry dashboard with logs filtering per mock and log cleanup.
 
-- **⚙️ 3 Modos de Operação por Rota**:
-  - **🎲 Dynamic Faker**: Gera massa de dados novos e realistas a cada requisição `GET`.
-  - **💾 Stateful SQLite**: Simula banco de dados real. `POST` salva o registro no SQLite local; `GET` busca os salvos; `PUT/DELETE` atualizam e removem.
-  - **📌 Estático**: Retorna um JSON estático pré-configurado.
+- **🎯 Field Schema Customizer & Overrides**:
+  - Automatically extracts all fields from your JSON model into a visual mapping table.
+  - Override generator types per field: CNPJ (Formatted/Numeric), CPF, UUID, Numeric String, Alphanumeric Code, Email, Full Name, Company, Dates, Currency, Integers, Booleans.
 
-- **⚡ Engenharia de Caos & Simulação de Resiliência**:
-  - **Latência Artificial**: De `0ms` a `5000ms`.
-  - **Taxa de Erro Simulado**: De `0%` a `100%` para simular falhas artificiais `500 Internal Server Error`.
+- **⚙️ 3 Operating Modes per Mock**:
+  - **🎲 Dynamic Faker**: Generates fresh, realistic mock data on every `GET` request.
+  - **💾 Stateful SQLite**: Simulates real database behaviour (`POST` inserts into SQLite, `GET` queries inserted items, `PUT/DELETE` update and remove).
+  - **📌 Static**: Returns a custom fixed JSON payload.
 
-- **🔄 CI/CD Automatizado**:
-  - Publicação automática da imagem Docker no **GitHub Container Registry (GHCR)** via GitHub Actions.
+- **⚡ Chaos Engineering & Latency Simulation**:
+  - **Artificial Latency**: Configurable delay from `0ms` to `5000ms`.
+  - **Error Rate Simulation**: Configurable percentage (`0%` to `100%`) of simulated `500 Internal Server Error` responses.
 
 ---
 
-## 📦 Como Executar
+## 📦 Quick Start & Deployment
 
-### 1. Direct Pull do Docker Hub (Recomendado para Portainer / Production)
+### 1. Docker Hub Pull (Recommended for Portainer / Production)
 
 ```bash
 docker run -d \
@@ -61,7 +69,7 @@ docker run -d \
   devfurtado/mockforge:latest
 ```
 
-Ou no **Portainer Stack / Docker Compose**:
+#### Portainer / Docker Compose Stack:
 ```yaml
 version: '3.8'
 
@@ -76,9 +84,11 @@ services:
       - ./data:/app/data
 ```
 
+Access the Web Dashboard at: **`http://localhost:3001`**
+
 ---
 
-### 2. Usando a imagem do GHCR
+### 2. GitHub Container Registry (GHCR)
 
 ```bash
 docker run -d \
@@ -88,24 +98,9 @@ docker run -d \
   ghcr.io/viniciusfurtado/mockforge:latest
 ```
 
-Acesse em: **`http://localhost:3001`**
-
 ---
 
-### 2. Usando Docker Compose
-
-Clone o repositório e execute:
-
-```bash
-git clone https://github.com/viniciusfurtado/mockforge.git
-cd mockforge
-
-docker compose up -d --build
-```
-
----
-
-### 3. Desenvolvimento Local
+### 3. Local Development Setup
 
 #### Backend (Fastify + SQLite):
 ```bash
@@ -123,35 +118,43 @@ npm run dev
 
 ---
 
-## 📝 Exemplo de Modelo no Cadastro
+## 📝 Example JSON Input
 
-Cole qualquer JSON da sua documentação no painel:
+Paste any JSON example into the **JSON Model & Schema** tab:
 
 ```json
 {
-  "id": "uuid",
-  "nome": "João da Silva",
-  "email": "joao.silva@empresa.com",
-  "cpf": "12345678901",
-  "cargo": "Desenvolvedor Senior",
-  "salario": 12500.00,
-  "ativo": true,
-  "dataAdmissao": "2024-03-15T08:00:00.000Z"
+  "cnpjEmpresa": "43035146004172",
+  "senhaConexao": "40904f45-f72c-46b6-9924-1ac5d67c8e46",
+  "numeroPedido": "0041PROT260731000001",
+  "codigoAgenciaAtendimento": 2568,
+  "codigoPostoAtendimento": 2134,
+  "dataAtendimento": "2026-07-30T08:00:00.000Z",
+  "gtve": [
+    {
+      "numeroGtv": "734670",
+      "valorGtv": 100
+    }
+  ]
 }
 ```
 
-O **MockForge** infere automaticamente os tipos e associa handlers inteligentes do Faker.
+MockForge automatically preserves strict primitive types (numbers stay numbers) and generates valid matching domain mock data.
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## 🤝 Contributing
 
-- **Backend**: Node.js, Fastify, TypeScript, SQLite, `@faker-js/faker`.
-- **Frontend**: React, Vite, TypeScript, Monaco Editor, Lucide Icons.
-- **DevOps**: Docker, Docker Compose, GitHub Actions (GHCR).
+Contributions from all over the world are welcome! Whether you are fixing a bug, adding generator presets, or translating documentation into new languages.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add awesome new feature'`)
+4. Push to the branch (`git checkout -b feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
-## 📄 Licença
+## 📄 License
 
-Este projeto está licenciado sob a licença MIT - consulte o arquivo [LICENSE](LICENSE) para obter detalhes.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
