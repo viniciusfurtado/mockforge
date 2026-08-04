@@ -167,11 +167,13 @@ export function App() {
   };
 
   const fetchEndpoints = async () => {
+    if (!token) return;
     try {
       const res = await apiFetch(`${API_BASE}/_admin/endpoints`);
+      if (!res.ok) return;
       const data = await res.json();
-      setEndpoints(data);
-      if (data.length > 0 && !selectedEndpoint) {
+      setEndpoints(Array.isArray(data) ? data : []);
+      if (Array.isArray(data) && data.length > 0 && !selectedEndpoint) {
         selectEndpointItem(data[0]);
       }
     } catch (err) {
@@ -180,8 +182,10 @@ export function App() {
   };
 
   const fetchStats = async () => {
+    if (!token) return;
     try {
       const res = await apiFetch(`${API_BASE}/_admin/stats`);
+      if (!res.ok) return;
       const data = await res.json();
       setStats(data);
     } catch (err) {
@@ -190,16 +194,20 @@ export function App() {
   };
 
   const fetchLogs = async () => {
+    if (!token) return;
     try {
       const res = await apiFetch(`${API_BASE}/_admin/logs`);
+      if (!res.ok) return;
       const data = await res.json();
-      setLogs(data);
+      setLogs(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Erro logs:', err);
     }
   };
 
   useEffect(() => {
+    if (!token) return;
+    
     fetchEndpoints();
     fetchStats();
     fetchLogs();
@@ -209,7 +217,7 @@ export function App() {
       fetchLogs();
     }, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [token]);
 
   const extractSchemaFields = async (schemaText: string, currentOverrides?: Record<string, string>) => {
     try {
