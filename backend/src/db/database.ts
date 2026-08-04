@@ -33,6 +33,7 @@ export async function getDb(): Promise<Database> {
       schema TEXT NOT NULL,
       staticResponse TEXT,
       fieldOverrides TEXT,
+      workspaceId TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
       updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -102,9 +103,20 @@ export async function getDb(): Promise<Database> {
     const hashed = await bcrypt.hash('admin123', 10);
     await dbInstance.run('INSERT INTO users (id, name, email, password, role) VALUES (?, ?, ?, ?, ?)', [adminId, 'Administrador', 'admin@mockforge.com', hashed, 'admin']);
     
-    const wsId = 'default-ws-id';
+    const wsId = 'default-workspace-id';
     await dbInstance.run('INSERT INTO workspaces (id, name, description, ownerId) VALUES (?, ?, ?, ?)', [wsId, 'Workspace Principal', 'Workspace padrão', adminId]);
     await dbInstance.run('INSERT INTO workspace_members (id, workspaceId, userId, role) VALUES (?, ?, ?, ?)', ['default-member-id', wsId, adminId, 'owner']);
+  }
+
+  // --- MIGRATIONS MANUAIS ---
+  try {
+    await dbInstance.run("ALTER TABLE endpoints ADD COLUMN workspaceId TEXT");
+    const defaultWs = await dbInstance.get("SELECT id FROM workspaces ORDER BY createdAt ASC LIMIT 1");
+    if (defaultWs) {
+      await dbInstance.run("UPDATE endpoints SET workspaceId = ?", [defaultWs.id]);
+    }
+  } catch (e) {
+    // A coluna já existe, ignora o erro
   }
 
   console.log('✅ SQLite Database initialized at:', dbPath);

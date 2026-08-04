@@ -180,10 +180,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const created = await db.get('SELECT * FROM workspaces WHERE id = ?', [wsId]);
     return reply.status(201).send(created);
   });
-  // Listar todos os endpoints
-  fastify.get('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async () => {
+  // Listar todos os endpoints de um workspace
+  fastify.get('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
-    const endpoints = await db.all('SELECT * FROM endpoints ORDER BY createdAt DESC');
+    const { workspaceId } = request.query as any;
+    if (!workspaceId) return reply.status(400).send({ error: 'workspaceId é obrigatório' });
+    
+    // Validate if user has access to this workspace
+    const membership = await db.get('SELECT role FROM workspace_members WHERE workspaceId = ? AND userId = ?', [workspaceId, request.user.id]);
+    if (!membership && request.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Acesso negado a este workspace.' });
+    }
+
+    const endpoints = await db.all('SELECT * FROM endpoints WHERE workspaceId = ? ORDER BY createdAt DESC', [workspaceId]);
     return endpoints;
   });
 
@@ -211,11 +220,17 @@ export async function adminRoutes(fastify: FastifyInstance) {
       errorRate = 0,
       schema,
       staticResponse = '',
-      fieldOverrides = {}
+      fieldOverrides = {},
+      workspaceId
     } = body;
 
-    if (!name || !path || !schema) {
-      return reply.status(400).send({ error: 'Os campos name, path e schema são obrigatórios.' });
+    if (!name || !path || !schema || !workspaceId) {
+      return reply.status(400).send({ error: 'Os campos name, path, schema e workspaceId são obrigatórios.' });
+    }
+
+    const membership = await db.get('SELECT role FROM workspace_members WHERE workspaceId = ? AND userId = ?', [workspaceId, request.user.id]);
+    if (!membership && request.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Acesso negado a este workspace.' });
     }
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -223,8 +238,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const overridesString = typeof fieldOverrides === 'string' ? fieldOverrides : JSON.stringify(fieldOverrides);
 
     await db.run(`
-      INSERT INTO endpoints (id, name, path, method, mode, statusCode, delayMs, errorRate, schema, staticResponse, fieldOverrides)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO endpoints (id, name, path, method, mode, statusCode, delayMs, errorRate, schema, staticResponse, fieldOverrides, workspaceId)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id,
       name,
@@ -236,7 +251,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
       Number(errorRate),
       schemaString,
       typeof staticResponse === 'string' ? staticResponse : JSON.stringify(staticResponse),
-      overridesString
+      overridesString,
+      workspaceId
     ]);
 
     const created = await db.get('SELECT * FROM endpoints WHERE id = ?', [id]);
@@ -335,12 +351,29 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Stats
-  fastify.get('/_admin/stats', { preHandler: [(fastify as any).authenticate] }, async () => {
+  fastify.get('/_admin/stats', { preHandler: [(fastify as any).authenticate] }, async (request: any) => {
     const db = await getDb();
-    const totalEndpoints = (await db.get('SELECT COUNT(*) as count FROM endpoints')).count;
-    const totalRequests = (await db.get('SELECT COUNT(*) as count FROM request_logs')).count;
-    const simulatedErrors = (await db.get('SELECT COUNT(*) as count FROM request_logs WHERE isSimulatedError = 1')).count;
-    const avgObj = await db.get('SELECT AVG(responseDelay) as avg FROM request_logs');
+    const { workspaceId } = request.query as any;
+
+    let baseEndpointFilter = '';
+    let params: any[] = [];
+    if (workspaceId) {
+      baseEndpointFilter = 'WHERE workspaceId = ?';
+      params.push(workspaceId);
+    }
+
+    const totalEndpoints = (await db.get(`SELECT COUNT(*) as count FROM endpoints ${baseEndpointFilter}`, params)).count;
+    
+    let joinLogs = '';
+    let logsWhere = '';
+    if (workspaceId) {
+      joinLogs = 'JOIN endpoints e ON request_logs.endpointId = e.id';
+      logsWhere = 'WHERE e.workspaceId = ?';
+    }
+
+    const totalRequests = (await db.get(`SELECT COUNT(*) as count FROM request_logs ${joinLogs} ${logsWhere}`, params)).count;
+    const simulatedErrors = (await db.get(`SELECT COUNT(*) as count FROM request_logs ${joinLogs} ${logsWhere ? logsWhere + ' AND ' : 'WHERE '} isSimulatedError = 1`, params)).count;
+    const avgObj = await db.get(`SELECT AVG(responseDelay) as avg FROM request_logs ${joinLogs} ${logsWhere}`, params);
     const avgDelay = avgObj ? avgObj.avg : 0;
 
     return {
@@ -352,13 +385,24 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Logs
-  fastify.get('/_admin/logs', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.get('/_admin/logs', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
-    const { endpointId } = request.query as any;
+    const { endpointId, workspaceId } = request.query as any;
 
     if (endpointId) {
       const logs = await db.all('SELECT * FROM request_logs WHERE endpointId = ? ORDER BY timestamp DESC LIMIT 50', [endpointId]);
       return logs;
+    }
+
+    if (workspaceId) {
+       // Filter logs for this workspace only
+       const logs = await db.all(`
+         SELECT r.* FROM request_logs r
+         JOIN endpoints e ON r.endpointId = e.id
+         WHERE e.workspaceId = ?
+         ORDER BY timestamp DESC LIMIT 50
+       `, [workspaceId]);
+       return logs;
     }
 
     const logs = await db.all('SELECT * FROM request_logs ORDER BY timestamp DESC LIMIT 50');

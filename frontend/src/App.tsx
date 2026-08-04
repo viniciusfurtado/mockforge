@@ -20,7 +20,8 @@ import {
   ChevronRight,
   PanelLeftClose,
   PanelLeft,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Building
 } from 'lucide-react';
 import { Settings } from './Settings';
 
@@ -166,6 +167,10 @@ export function App() {
   const [confirmDialog, setConfirmDialog] = useState<{ msg: string; onConfirm: () => void } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // Workspace Context
+  const [userWorkspaces, setUserWorkspaces] = useState<any[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<any>(null);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -173,9 +178,9 @@ export function App() {
   };
 
   const fetchEndpoints = async () => {
-    if (!token) return;
+    if (!token || !activeWorkspace) return;
     try {
-      const res = await apiFetch(`${API_BASE}/_admin/endpoints`);
+      const res = await apiFetch(`${API_BASE}/_admin/endpoints?workspaceId=${activeWorkspace.id}`);
       if (!res.ok) return;
       const data = await res.json();
       setEndpoints(Array.isArray(data) ? data : []);
@@ -188,9 +193,9 @@ export function App() {
   };
 
   const fetchStats = async () => {
-    if (!token) return;
+    if (!token || !activeWorkspace) return;
     try {
-      const res = await apiFetch(`${API_BASE}/_admin/stats`);
+      const res = await apiFetch(`${API_BASE}/_admin/stats?workspaceId=${activeWorkspace.id}`);
       if (!res.ok) return;
       const data = await res.json();
       setStats(data);
@@ -200,9 +205,12 @@ export function App() {
   };
 
   const fetchLogs = async () => {
-    if (!token) return;
+    if (!token || !activeWorkspace) return;
     try {
-      const res = await apiFetch(`${API_BASE}/_admin/logs`);
+      const url = selectedEndpoint 
+        ? `${API_BASE}/_admin/logs?endpointId=${selectedEndpoint.id}`
+        : `${API_BASE}/_admin/logs?workspaceId=${activeWorkspace.id}`;
+      const res = await apiFetch(url);
       if (!res.ok) return;
       const data = await res.json();
       setLogs(Array.isArray(data) ? data : []);
@@ -218,6 +226,10 @@ export function App() {
       if (res.ok) {
         const data = await res.json();
         setCurrentUser(data.user);
+        setUserWorkspaces(data.workspaces);
+        if (data.workspaces.length > 0 && !activeWorkspace) {
+          setActiveWorkspace(data.workspaces[0]);
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar usuário logado:', err);
@@ -226,18 +238,24 @@ export function App() {
 
   useEffect(() => {
     if (!token) return;
-    
     fetchCurrentUser();
+  }, [token]);
+
+  useEffect(() => {
+    if (!activeWorkspace) return;
     fetchEndpoints();
     fetchStats();
     fetchLogs();
+  }, [activeWorkspace]);
 
+  useEffect(() => {
+    if (!activeWorkspace) return;
     const interval = setInterval(() => {
       fetchStats();
       fetchLogs();
     }, 4000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, activeWorkspace]);
 
   const extractSchemaFields = async (schemaText: string, currentOverrides?: Record<string, string>) => {
     try {
@@ -317,6 +335,7 @@ export function App() {
 
       const payload = {
         ...formData,
+        workspaceId: activeWorkspace?.id,
         fieldOverrides: JSON.stringify(fieldOverridesMap)
       };
 
@@ -464,6 +483,8 @@ export function App() {
       if (!res.ok) throw new Error(data.error || 'Erro no login');
       setToken(data.token);
       setCurrentUser(data.user);
+      setUserWorkspaces(data.workspaces);
+      if (data.workspaces?.length > 0) setActiveWorkspace(data.workspaces[0]);
       localStorage.setItem('token', data.token);
     } catch (err: any) {
       setLoginError(err.message);
@@ -522,7 +543,32 @@ export function App() {
           <span className="logo-title">MockForge Engine</span>
         </div>
 
-        <div className="stats-bar">
+        {activeWorkspace && userWorkspaces.length > 0 && (
+          <div style={{ marginLeft: '2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Building size={16} style={{ color: '#a3a3a3' }} />
+            <select 
+              value={activeWorkspace.id} 
+              onChange={(e) => {
+                const ws = userWorkspaces.find(w => w.id === e.target.value);
+                if (ws) {
+                  setActiveWorkspace(ws);
+                  setSelectedEndpoint(null);
+                }
+              }}
+              style={{
+                background: '#171717', border: '1px solid #262626', color: '#fff', 
+                padding: '6px 12px', borderRadius: '6px', outline: 'none', cursor: 'pointer',
+                fontWeight: 500, minWidth: '200px'
+              }}
+            >
+              {userWorkspaces.map(ws => (
+                <option key={ws.id} value={ws.id}>{ws.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="stats-bar" style={{ marginLeft: 'auto' }}>
           <div className="stat-pill">
             <Layers size={14} />
             <span>Mocks: <strong>{stats.totalEndpoints}</strong></span>
