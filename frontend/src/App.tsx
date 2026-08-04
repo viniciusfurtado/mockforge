@@ -90,12 +90,12 @@ export function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  const apiFetch = async (url, options = {}) => {
+  const apiFetch = async (url: string, options: any = {}) => {
     const headers = new Headers(options.headers || {});
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
     }
-    const res = await apiFetch(url, { ...options, headers });
+    const res = await fetch(url, { ...options, headers });
     if (res.status === 401 || res.status === 403) {
       setToken('');
       localStorage.removeItem('token');
@@ -415,6 +415,57 @@ export function App() {
     ep.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     ep.path.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    try {
+      const res = await fetch(`${API_BASE}/_admin/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro no login');
+      setToken(data.token);
+      localStorage.setItem('token', data.token);
+    } catch (err: any) {
+      setLoginError(err.message);
+    }
+  };
+
+  if (!token) {
+    return (
+      <div style={{minHeight: '100vh', backgroundColor: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#fff', padding: '1rem'}}>
+        <div style={{width: '100%', maxWidth: '400px', backgroundColor: '#171717', border: '1px solid #262626', padding: '2rem', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.5)'}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '2rem', justifyContent: 'center'}}>
+            <div style={{width: '40px', height: '40px', backgroundColor: '#6366f1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+              <Layers size={24} />
+            </div>
+            <h1 style={{fontSize: '1.5rem', fontWeight: 'bold'}}>MockForge</h1>
+          </div>
+          <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+            {loginError && (
+              <div style={{backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', padding: '0.75rem', borderRadius: '8px', fontSize: '0.875rem'}}>
+                {loginError}
+              </div>
+            )}
+            <div>
+              <label style={{display: 'block', fontSize: '0.75rem', fontWeight: '500', color: '#a3a3a3', textTransform: 'uppercase', marginBottom: '4px'}}>E-mail</label>
+              <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@mockforge.com" style={{width: '100%', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '8px', padding: '0.75rem 1rem', color: '#fff', outline: 'none', boxSizing: 'border-box'}} />
+            </div>
+            <div>
+              <label style={{display: 'block', fontSize: '0.75rem', fontWeight: '500', color: '#a3a3a3', textTransform: 'uppercase', marginBottom: '4px'}}>Senha</label>
+              <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="••••••••" style={{width: '100%', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '8px', padding: '0.75rem 1rem', color: '#fff', outline: 'none', boxSizing: 'border-box'}} />
+            </div>
+            <button type="submit" style={{width: '100%', backgroundColor: '#4f46e5', color: '#fff', fontWeight: '500', padding: '0.75rem', borderRadius: '8px', marginTop: '0.5rem', cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}>
+              <Server size={18} /> Entrar no Painel
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
