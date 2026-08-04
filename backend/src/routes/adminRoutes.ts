@@ -181,14 +181,14 @@ export async function adminRoutes(fastify: FastifyInstance) {
     return reply.status(201).send(created);
   });
   // Listar todos os endpoints
-  fastify.get('/_admin/endpoints', async () => {
+  fastify.get('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async () => {
     const db = await getDb();
     const endpoints = await db.all('SELECT * FROM endpoints ORDER BY createdAt DESC');
     return endpoints;
   });
 
   // Buscar 1 endpoint por ID
-  fastify.get('/_admin/endpoints/:id', async (request, reply) => {
+  fastify.get('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     const ep = await db.get('SELECT * FROM endpoints WHERE id = ?', [id]);
@@ -197,7 +197,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Criar novo endpoint mockado
-  fastify.post('/_admin/endpoints', async (request, reply) => {
+  fastify.post('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const body = request.body as any;
     const id = randomUUID();
@@ -244,7 +244,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Atualizar endpoint
-  fastify.put('/_admin/endpoints/:id', async (request, reply) => {
+  fastify.put('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     const body = request.body as any;
@@ -292,7 +292,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Deletar endpoint
-  fastify.delete('/_admin/endpoints/:id', async (request, reply) => {
+  fastify.delete('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     await db.run('DELETE FROM endpoints WHERE id = ?', [id]);
@@ -301,7 +301,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Extrair campos do Schema
-  fastify.post('/_admin/extract-fields', async (request, reply) => {
+  fastify.post('/_admin/extract-fields', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const { schema } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
 
@@ -311,7 +311,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Resetar estado de um endpoint Stateful
-  fastify.post('/_admin/endpoints/:id/reset-state', async (request, reply) => {
+  fastify.post('/_admin/endpoints/:id/reset-state', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     await db.run('DELETE FROM records WHERE endpointId = ?', [id]);
@@ -319,7 +319,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Preview dinâmico
-  fastify.post('/_admin/preview', async (request, reply) => {
+  fastify.post('/_admin/preview', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const { schema, count = 1, fieldOverrides = {} } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
 
@@ -335,7 +335,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Stats
-  fastify.get('/_admin/stats', async () => {
+  fastify.get('/_admin/stats', { preHandler: [(fastify as any).authenticate] }, async () => {
     const db = await getDb();
     const totalEndpoints = (await db.get('SELECT COUNT(*) as count FROM endpoints')).count;
     const totalRequests = (await db.get('SELECT COUNT(*) as count FROM request_logs')).count;
@@ -352,7 +352,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Logs
-  fastify.get('/_admin/logs', async (request, reply) => {
+  fastify.get('/_admin/logs', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const { endpointId } = request.query as any;
 
@@ -366,7 +366,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Limpar Logs
-  fastify.delete('/_admin/logs', async (request, reply) => {
+  fastify.delete('/_admin/logs', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
     const db = await getDb();
     const { endpointId } = request.query as any;
 

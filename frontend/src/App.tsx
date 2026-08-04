@@ -84,6 +84,25 @@ const PRESET_OPTIONS = [
 ];
 
 export function App() {
+
+  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const apiFetch = async (url, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    const res = await apiFetch(url, { ...options, headers });
+    if (res.status === 401 || res.status === 403) {
+      setToken('');
+      localStorage.removeItem('token');
+    }
+    return res;
+  };
+
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
   const [activeTab, setActiveTab] = useState<'config' | 'schema' | 'overrides' | 'playground' | 'logs'>('config');
@@ -149,7 +168,7 @@ export function App() {
 
   const fetchEndpoints = async () => {
     try {
-      const res = await fetch(`${API_BASE}/_admin/endpoints`);
+      const res = await apiFetch(`${API_BASE}/_admin/endpoints`);
       const data = await res.json();
       setEndpoints(data);
       if (data.length > 0 && !selectedEndpoint) {
@@ -162,7 +181,7 @@ export function App() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${API_BASE}/_admin/stats`);
+      const res = await apiFetch(`${API_BASE}/_admin/stats`);
       const data = await res.json();
       setStats(data);
     } catch (err) {
@@ -172,7 +191,7 @@ export function App() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`${API_BASE}/_admin/logs`);
+      const res = await apiFetch(`${API_BASE}/_admin/logs`);
       const data = await res.json();
       setLogs(data);
     } catch (err) {
@@ -194,7 +213,7 @@ export function App() {
 
   const extractSchemaFields = async (schemaText: string, currentOverrides?: Record<string, string>) => {
     try {
-      const res = await fetch(`${API_BASE}/_admin/extract-fields`, {
+      const res = await apiFetch(`${API_BASE}/_admin/extract-fields`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schema: schemaText })
@@ -273,7 +292,7 @@ export function App() {
         fieldOverrides: JSON.stringify(fieldOverridesMap)
       };
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -295,7 +314,7 @@ export function App() {
     if (!confirm(`Deseja realmente apagar o mock "${selectedEndpoint.name}"?`)) return;
 
     try {
-      await fetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}`, { method: 'DELETE' });
+      await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}`, { method: 'DELETE' });
       showNotification('Mock removido!');
       setSelectedEndpoint(null);
       await fetchEndpoints();
@@ -307,7 +326,7 @@ export function App() {
   const handleResetState = async () => {
     if (!selectedEndpoint) return;
     try {
-      await fetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}/reset-state`, { method: 'POST' });
+      await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}/reset-state`, { method: 'POST' });
       showNotification('Massa de dados do SQLite resetada com sucesso! 🔄');
     } catch (err: any) {
       showNotification(`Erro ao resetar: ${err.message}`);
@@ -318,7 +337,7 @@ export function App() {
     try {
       const rawSchema = schemaToUse || formData.schema;
       const rawOverrides = overridesToUse || fieldOverridesMap;
-      const res = await fetch(`${API_BASE}/_admin/preview`, {
+      const res = await apiFetch(`${API_BASE}/_admin/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schema: rawSchema, count, fieldOverrides: rawOverrides })
@@ -353,7 +372,7 @@ export function App() {
 
     try {
       const url = epId ? `${API_BASE}/_admin/logs?endpointId=${epId}` : `${API_BASE}/_admin/logs`;
-      await fetch(url, { method: 'DELETE' });
+      await apiFetch(url, { method: 'DELETE' });
       showNotification('Logs de telemetria limpos com sucesso! 🧹');
       await fetchLogs();
       await fetchStats();
@@ -375,7 +394,7 @@ export function App() {
         options.body = testBody;
       }
 
-      const res = await fetch(`${API_BASE}${formData.path}`, options);
+      const res = await apiFetch(`${API_BASE}${formData.path}`, options);
       const endTime = performance.now();
       setTestTime(Math.round(endTime - startTime));
       setTestStatus(res.status);
