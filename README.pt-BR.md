@@ -17,18 +17,18 @@ Ele recebe a estrutura de qualquer classe ou contrato da documentação (JSON / 
 ## 🏗️ Arquitetura
 
 ```mermaid
-flowchart TD
-    subgraph Container [Container Docker]
-        UI[Painel Web Admin - React + Monaco Editor]
-        API[Engine Mock Server - Fastify + TypeScript]
-        DB[(SQLite Stateful Database)]
+graph LR
+    subgraph Docker["Container Docker"]
+        UI["Painel Admin (React)"]
+        API["Mock Engine (Fastify)"]
+        DB[("SQLite Database")]
         
-        UI <-->|Gerencia Mocks & Overrides| API
-        API <-->|Persiste Mocks & Logs| DB
+        UI --- API
+        API --- DB
     end
 
-    Dev[Desenvolvedor / QA] -->|Navegador| UI
-    App[Aplicação Dev / Mobile / Frontend] -->|Chamadas HTTP GET / POST / PUT / DELETE| API
+    User["Desenvolvedor / QA"] -->|"Navegador"| UI
+    App["Aplicação / Frontend"] -->|"Requisições HTTP"| API
 ```
 
 ---

@@ -28,18 +28,18 @@ O **MockForge** foi concebido para resolver o problema de dependência de APIs e
 ### Diagrama de Arquitetura
 
 ```mermaid
-flowchart TD
-    subgraph Container [Container Docker - Port 3001]
-        UI[Painel Web Admin - React + Monaco Editor]
-        API[Engine Mock Server - Fastify + TypeScript]
-        DB[(SQLite Stateful Database)]
+graph LR
+    subgraph Docker["Container Docker"]
+        UI["Painel Admin (React)"]
+        API["Mock Engine (Fastify)"]
+        DB[("SQLite Database")]
         
-        UI <-->|Gerencia Mocks & Overrides| API
-        API <-->|Persiste Mocks & Logs| DB
+        UI --- API
+        API --- DB
     end
 
-    Dev[Desenvolvedor / QA] -->|Navegador| UI
-    App[Aplicação Frontend / Mobile] -->|Requisições HTTP| API
+    User["Desenvolvedor / QA"] -->|"Navegador"| UI
+    App["Aplicação / Frontend"] -->|"Requisições HTTP"| API
 ```
 
 - **Frontend:** React + Vite + Monaco Editor (Editor estilo VS Code) + TailwindCSS.

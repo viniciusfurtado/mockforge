@@ -17,18 +17,18 @@ It takes any class or documentation contract structure (JSON / OpenAPI / Schemas
 ## 🏗️ Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Container [Docker Container]
-        UI[Web Admin Dashboard - React + Monaco Editor]
-        API[Mock Server Engine - Fastify + TypeScript]
-        DB[(SQLite Stateful Database)]
+graph LR
+    subgraph Docker["Docker Container"]
+        UI["Admin Panel (React)"]
+        API["Mock Engine (Fastify)"]
+        DB[("SQLite Database")]
         
-        UI <-->|Manages Mocks & Overrides| API
-        API <-->|Persists Records & Telemetry Logs| DB
+        UI --- API
+        API --- DB
     end
 
-    Dev[Developer / QA] -->|Browser| UI
-    App[Client App / Mobile / Frontend] -->|HTTP Calls GET / POST / PUT / DELETE| API
+    User["Developer / QA"] -->|"Browser"| UI
+    App["App / Frontend"] -->|"HTTP Requests"| API
 ```
 
 ---
