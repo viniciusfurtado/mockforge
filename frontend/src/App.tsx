@@ -65,21 +65,21 @@ const API_BASE = '';
 
 const PRESET_OPTIONS = [
   { value: 'auto', label: '🤖 Auto (Faker Inteligente)' },
-  { value: 'cnpj_formatted', label: '🏢 CNPJ Formatado (12.345.678/0001-90)' },
-  { value: 'cnpj_numeric', label: '🔢 CNPJ Numérico 14 Dígitos (43035146004172)' },
-  { value: 'cpf_formatted', label: '🆔 CPF Formatado (123.456.789-00)' },
-  { value: 'cpf_numeric', label: '🔢 CPF Numérico 11 Dígitos (12345678900)' },
-  { value: 'numeric_string', label: '🔢 Apenas Números em String (Ex: "734670")' },
-  { value: 'alphanumeric_code', label: '🔤 Código Alfanumérico (Ex: "PROT260731")' },
-  { value: 'uuid', label: '🔑 UUID v4 (Ex: "40904f45-f72c-46b6...")' },
-  { value: 'integer', label: '🔢 Número Inteiro (Ex: 2568)' },
-  { value: 'float', label: '💲 Número Decimal / Preço (Ex: 100.50)' },
+  { value: 'cnpj_formatted', label: '🏢 CNPJ Formatado (00.000.000/0001-91)' },
+  { value: 'cnpj_numeric', label: '🔢 CNPJ Numérico 14 Dígitos (00000000000191)' },
+  { value: 'cpf_formatted', label: '🆔 CPF Formatado (000.000.000-00)' },
+  { value: 'cpf_numeric', label: '🔢 CPF Numérico 11 Dígitos (00000000000)' },
+  { value: 'numeric_string', label: '🔢 Apenas Números em String (Ex: "123456")' },
+  { value: 'alphanumeric_code', label: '🔤 Código Alfanumérico (Ex: "PED123456")' },
+  { value: 'uuid', label: '🔑 UUID v4 (Ex: "123e4567-e89b-12d3...")' },
+  { value: 'integer', label: '🔢 Número Inteiro (Ex: 1001)' },
+  { value: 'float', label: '💲 Número Decimal / Preço (Ex: 150.00)' },
   { value: 'email', label: '✉️ E-mail' },
   { value: 'full_name', label: '👤 Nome Completo' },
   { value: 'company', label: '🏢 Nome de Empresa' },
   { value: 'phone', label: '📞 Telefone' },
-  { value: 'date_iso', label: '📅 Data Hora ISO 8601 (2026-07-30T08:00:00Z)' },
-  { value: 'date_simple', label: '📅 Data Simples (2026-07-30)' },
+  { value: 'date_iso', label: '📅 Data Hora ISO 8601 (2026-08-01T10:00:00Z)' },
+  { value: 'date_simple', label: '📅 Data Simples (2026-08-01)' },
   { value: 'boolean', label: '☑️ Boolean (true / false)' }
 ];
 
@@ -123,17 +123,17 @@ export function App() {
     delayMs: 0,
     errorRate: 0,
     schema: JSON.stringify({
-      cnpjEmpresa: "43035146004172",
-      senhaConexao: "40904f45-f72c-46b6-9924-1ac5d67c8e46",
-      numeroPedido: "0041PROT260731000001",
-      codigoAgenciaAtendimento: 2568,
-      codigoPostoAtendimento: 2134,
-      codigoBdnAtendimento: 1234567,
-      dataAtendimento: "2026-07-30T08:00:00.000",
-      gtve: [
+      cnpjEmpresa: "00000000000191",
+      senhaConexao: "123e4567-e89b-12d3-a456-426614174000",
+      numeroPedido: "PED-2026-0001",
+      codigoAgenciaAtendimento: 1001,
+      codigoPostoAtendimento: 501,
+      codigoBdnAtendimento: 9876543,
+      dataAtendimento: "2026-08-01T10:00:00.000Z",
+      itens: [
         {
-          numeroGtv: "734670",
-          valorGtv: 100
+          codigoItem: "ITEM-001",
+          valorItem: 150.00
         }
       ]
     }, null, 2),

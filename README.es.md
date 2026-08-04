@@ -124,16 +124,16 @@ Pega cualquier JSON de ejemplo en la pestaña **Modelo JSON & Schema**:
 
 ```json
 {
-  "cnpjEmpresa": "43035146004172",
-  "senhaConexao": "40904f45-f72c-46b6-9924-1ac5d67c8e46",
-  "numeroPedido": "0041PROT260731000001",
-  "codigoAgenciaAtendimento": 2568,
-  "codigoPostoAtendimento": 2134,
-  "dataAtendimento": "2026-07-30T08:00:00.000Z",
-  "gtve": [
+  "cnpjEmpresa": "00000000000191",
+  "tokenConexao": "123e4567-e89b-12d3-a456-426614174000",
+  "numeroPedido": "PED-2026-0001",
+  "codigoAgencia": 1001,
+  "codigoPosto": 501,
+  "dataAtendimento": "2026-08-01T10:00:00.000Z",
+  "itens": [
     {
-      "numeroGtv": "734670",
-      "valorGtv": 100
+      "codigoItem": "ITEM-001",
+      "valorUnitario": 150.00
     }
   ]
 }
