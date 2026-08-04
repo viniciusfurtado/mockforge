@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import fastifyJwt from '@fastify/jwt';
+import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import { adminRoutes } from './routes/adminRoutes';
@@ -13,11 +15,24 @@ const fastify = Fastify({
 });
 
 const PORT = Number(process.env.PORT || 3001);
+const JWT_SECRET = process.env.JWT_SECRET || 'mockforge-secret-key-change-in-production-2026';
 
 async function bootstrap() {
   await fastify.register(cors, {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  });
+
+  await fastify.register(fastifyJwt, {
+    secret: JWT_SECRET
+  });
+
+  fastify.decorate('authenticate', async (request: any, reply: any) => {
+    try {
+      await request.jwtVerify();
+    } catch (err) {
+      reply.status(401).send({ error: 'Não autorizado. Token de acesso ausente ou inválido.' });
+    }
   });
 
   await seedInitialData();
