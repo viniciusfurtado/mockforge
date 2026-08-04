@@ -169,6 +169,14 @@ code, pre, .font-mono {
   gap: 8px;
 }
 
+.sidebar-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .search-input {
   width: 100%;
   background: rgba(15, 23, 42, 0.6);
@@ -502,13 +510,14 @@ code, pre, .font-mono {
 
 .logs-table th {
   text-align: left;
-  padding: 7px 9px;
-  background: rgba(30, 41, 59, 0.4);
-  color: var(--text-muted);
+  padding: 9px 12px;
+  background: var(--bg-card-hover);
+  color: var(--text-main);
   font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .logs-table td {
-  padding: 7px 9px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-color);
 }

@@ -21,7 +21,9 @@ import {
   PanelLeftClose,
   PanelLeft,
   Settings as SettingsIcon,
-  Building
+  Building,
+  Copy,
+  LogOut
 } from 'lucide-react';
 import { Settings } from './Settings';
 
@@ -38,6 +40,7 @@ interface Endpoint {
   staticResponse?: string;
   fieldOverrides?: string;
   createdAt?: string;
+  workspaceId?: string;
 }
 
 interface Stats {
@@ -130,11 +133,12 @@ export function App() {
 
   // Playground state
   const [testMethod, setTestMethod] = useState('GET');
-  const [testBody, setTestBody] = useState('{\n  "nome": "Novo Teste"\n}');
-  const [testResponse, setTestResponse] = useState<string>('');
+  const [testBody, setTestBody] = useState('{\n  "key": "value"\n}');
+  const [testResponse, setTestResponse] = useState('');
   const [testStatus, setTestStatus] = useState<number | null>(null);
-  const [testTime, setTestTime] = useState<number | null>(null);
+  const [testTime, setTestTime] = useState<number>(0);
   const [isTesting, setIsTesting] = useState(false);
+  const [snippetLanguage, setSnippetLanguage] = useState('delphi');
 
   // Form State
   const [formData, setFormData] = useState<Partial<Endpoint>>({
@@ -171,6 +175,18 @@ export function App() {
   // Workspace Context
   const [userWorkspaces, setUserWorkspaces] = useState<any[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<any>(null);
+  const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (workspaceMenuRef.current && !workspaceMenuRef.current.contains(event.target as Node)) {
+        setShowWorkspaceMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -319,6 +335,60 @@ export function App() {
     setActiveTab('config');
     extractSchemaFields(newSchema, {});
     generatePreview(newSchema, 1, {});
+    fetchLogs();
+  };
+
+  const generateSnippet = () => {
+    const url = `${window.location.origin}${formData.path}`;
+    const method = testMethod;
+    const body = ['POST', 'PUT', 'PATCH'].includes(method) ? testBody : '';
+
+    switch (snippetLanguage) {
+      case 'curl':
+        return `curl ${method === 'GET' ? '' : `-X ${method} `}"${url}"${activeWorkspace?.apiKey ? ` \\\n     -H "X-Api-Key: ${activeWorkspace.apiKey}"` : ''}${body ? ` \\\n     -H "Content-Type: application/json" \\\n     -d '${body}'` : ''}`;
+      
+      case 'fetch':
+        return `fetch("${url}", {\n  method: "${method}",\n  headers: { "Content-Type": "application/json"${activeWorkspace?.apiKey ? `, "X-Api-Key": "${activeWorkspace.apiKey}"` : ''} }${body ? `,\n  body: JSON.stringify(${body})` : ''}\n})\n.then(response => response.json())\n.then(console.log);`;
+      
+      case 'axios':
+        return `axios({\n  method: '${method.toLowerCase()}',\n  url: '${url}',\n  headers: { 'Content-Type': 'application/json'${activeWorkspace?.apiKey ? `, 'X-Api-Key': '${activeWorkspace.apiKey}'` : ''} }${body ? `,\n  data: ${body}` : ''}\n})\n.then(response => console.log(response.data));`;
+
+      case 'python':
+        return `import requests\n\nurl = "${url}"\n${body ? `payload = ${body}\n` : ''}headers = {\n  "Content-Type": "application/json"${activeWorkspace?.apiKey ? `,\n  "X-Api-Key": "${activeWorkspace.apiKey}"` : ''}\n}\n\nresponse = requests.request("${method}", url, headers=headers${body ? ', json=payload' : ''})\nprint(response.json())`;
+
+      case 'delphi':
+        return `// Uses REST.Client, REST.Types, REST.Response.Adapter\nvar\n  Client: TRESTClient;\n  Request: TRESTRequest;\n  Response: TRESTResponse;\nbegin\n  Client := TRESTClient.Create('${url}');\n  Request := TRESTRequest.Create(nil);\n  Response := TRESTResponse.Create(nil);\n  try\n    Request.Client := Client;\n    Request.Response := Response;\n    Request.Method := rm${method};\n${body ? `    Request.AddBody('${body.replace(/'/g, "''").replace(/\n/g, '')}', ctAPPLICATION_JSON);\n` : ''}${activeWorkspace?.apiKey ? `    Request.AddParameter('X-Api-Key', '${activeWorkspace.apiKey}', pkHTTPHEADER, [poDoNotEncode]);\n` : ''}    Request.Execute;\n\n    if Response.StatusCode = 200 then\n      ShowMessage(Response.JSONText)\n    else\n      ShowMessage('Erro: ' + Response.StatusText);\n  finally\n    Response.Free;\n    Request.Free;\n    Client.Free;\n  end;\nend;`;
+
+      default:
+        return '';
+    }
+  };
+
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      showNotification('Código copiado para a área de transferência!', 'success');
+    } catch (err) {
+      showNotification('Erro ao copiar código', 'error');
+    }
+    document.body.removeChild(textArea);
+  };
+
+  const copySnippet = () => {
+    const text = generateSnippet();
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => showNotification('Código copiado para a área de transferência!', 'success'))
+        .catch(() => fallbackCopyTextToClipboard(text));
+    } else {
+      fallbackCopyTextToClipboard(text);
+    }
   };
 
   const handleSave = async () => {
@@ -335,7 +405,7 @@ export function App() {
 
       const payload = {
         ...formData,
-        workspaceId: activeWorkspace?.id,
+        workspaceId: formData.workspaceId || activeWorkspace?.id,
         fieldOverrides: JSON.stringify(fieldOverridesMap)
       };
 
@@ -440,15 +510,20 @@ export function App() {
     setIsTesting(true);
     const startTime = performance.now();
     try {
+      const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (activeWorkspace?.apiKey) {
+        fetchHeaders['X-Api-Key'] = activeWorkspace.apiKey;
+      }
       const options: RequestInit = {
         method: testMethod,
-        headers: { 'Content-Type': 'application/json' }
+        headers: fetchHeaders
       };
       if (['POST', 'PUT', 'PATCH'].includes(testMethod)) {
         options.body = testBody;
       }
 
-      const res = await apiFetch(`${API_BASE}${formData.path}`, options);
+      // IMPORTANTE: Utilizar fetch padrão aqui para não ser interceptado pelo apiFetch e perder sessão em erro 401 simulado
+      const res = await fetch(`${API_BASE}${formData.path}`, options);
       const endTime = performance.now();
       setTestTime(Math.round(endTime - startTime));
       setTestStatus(res.status);
@@ -509,11 +584,11 @@ export function App() {
             )}
             <div>
               <label style={{display: 'block', fontSize: '0.75rem', fontWeight: '500', color: '#a3a3a3', textTransform: 'uppercase', marginBottom: '4px'}}>E-mail</label>
-              <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@mockforge.com" style={{width: '100%', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '8px', padding: '0.75rem 1rem', color: '#fff', outline: 'none', boxSizing: 'border-box'}} />
+              <input id="login-email" name="email" type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="admin@mockforge.com" style={{width: '100%', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '8px', padding: '0.75rem 1rem', color: '#fff', outline: 'none', boxSizing: 'border-box'}} />
             </div>
             <div>
               <label style={{display: 'block', fontSize: '0.75rem', fontWeight: '500', color: '#a3a3a3', textTransform: 'uppercase', marginBottom: '4px'}}>Senha</label>
-              <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="••••••••" style={{width: '100%', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '8px', padding: '0.75rem 1rem', color: '#fff', outline: 'none', boxSizing: 'border-box'}} />
+              <input id="login-password" name="password" type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="••••••••" style={{width: '100%', backgroundColor: '#0a0a0a', border: '1px solid #262626', borderRadius: '8px', padding: '0.75rem 1rem', color: '#fff', outline: 'none', boxSizing: 'border-box'}} />
             </div>
             <button type="submit" style={{width: '100%', backgroundColor: '#4f46e5', color: '#fff', fontWeight: '500', padding: '0.75rem', borderRadius: '8px', marginTop: '0.5rem', cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}>
               <Server size={18} /> Entrar no Painel
@@ -543,30 +618,7 @@ export function App() {
           <span className="logo-title">MockForge Engine</span>
         </div>
 
-        {activeWorkspace && userWorkspaces.length > 0 && (
-          <div style={{ marginLeft: '2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Building size={16} style={{ color: '#a3a3a3' }} />
-            <select 
-              value={activeWorkspace.id} 
-              onChange={(e) => {
-                const ws = userWorkspaces.find(w => w.id === e.target.value);
-                if (ws) {
-                  setActiveWorkspace(ws);
-                  setSelectedEndpoint(null);
-                }
-              }}
-              style={{
-                background: '#171717', border: '1px solid #262626', color: '#fff', 
-                padding: '6px 12px', borderRadius: '6px', outline: 'none', cursor: 'pointer',
-                fontWeight: 500, minWidth: '200px'
-              }}
-            >
-              {userWorkspaces.map(ws => (
-                <option key={ws.id} value={ws.id}>{ws.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+
 
         <div className="stats-bar" style={{ marginLeft: 'auto' }}>
           <div className="stat-pill">
@@ -585,9 +637,6 @@ export function App() {
             <AlertTriangle size={14} style={{ color: stats.simulatedErrors > 0 ? '#EF4444' : undefined }} />
             <span>Erros Simulações: <strong>{stats.simulatedErrors}</strong></span>
           </div>
-          <button onClick={() => setShowSettings(true)} style={{ background: 'transparent', border: '1px solid #404040', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-            <SettingsIcon size={14} /> Ajustes
-          </button>
         </div>
       </header>
 
@@ -595,7 +644,100 @@ export function App() {
       <div className="main-layout">
         {/* Sidebar Collapsible */}
         <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
-          <div className="sidebar-header">
+          <div className="sidebar-header" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            
+            {activeWorkspace && userWorkspaces.length > 0 && (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }} ref={workspaceMenuRef}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <button 
+                    onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-color)', color: 'var(--text-main)', 
+                      padding: '8px 12px', borderRadius: '8px', outline: 'none', cursor: 'pointer',
+                      fontWeight: 500, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                      <Building size={16} style={{ color: '#a3a3a3', flexShrink: 0 }} />
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeWorkspace.name}</span>
+                    </div>
+                    <ChevronLeft size={16} style={{ transform: showWorkspaceMenu ? 'rotate(90deg)' : 'rotate(270deg)', transition: 'transform 0.2s', color: '#666', flexShrink: 0 }} />
+                  </button>
+
+                  {showWorkspaceMenu && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, marginTop: '8px',
+                      width: '100%', minWidth: '220px', background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                      borderRadius: '8px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', zIndex: 50, overflow: 'hidden',
+                      display: 'flex', flexDirection: 'column'
+                    }}>
+                      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                        Meus Workspaces
+                      </div>
+                      <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        {userWorkspaces.map(ws => (
+                          <button
+                            key={ws.id}
+                            onClick={() => {
+                              setActiveWorkspace(ws);
+                              setSelectedEndpoint(null);
+                              setShowWorkspaceMenu(false);
+                            }}
+                            style={{
+                              width: '100%', textAlign: 'left', padding: '10px 12px', background: ws.id === activeWorkspace.id ? 'var(--bg-card-hover)' : 'transparent',
+                              border: 'none', color: ws.id === activeWorkspace.id ? 'var(--text-main)' : 'var(--text-muted)', cursor: 'pointer', display: 'block', fontSize: '0.9rem'
+                            }}
+                            onMouseEnter={(e) => { if (ws.id !== activeWorkspace.id) e.currentTarget.style.background = 'var(--bg-card-hover)'; }}
+                            onMouseLeave={(e) => { if (ws.id !== activeWorkspace.id) e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            {ws.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ borderTop: '1px solid var(--border-color)', padding: '8px' }}>
+                        <button
+                          onClick={() => {
+                            setShowWorkspaceMenu(false);
+                            setShowSettings(true);
+                            setTimeout(() => {
+                              const wsTabBtn = document.querySelector('[data-tab="workspaces"]') as HTMLButtonElement;
+                              if (wsTabBtn) wsTabBtn.click();
+                            }, 100);
+                          }}
+                          style={{
+                            width: '100%', textAlign: 'left', padding: '8px 12px', background: 'transparent',
+                            border: 'none', color: '#6366f1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
+                            fontSize: '0.85rem', fontWeight: 500, borderRadius: '4px'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <SettingsIcon size={14} /> Gerenciar Workspaces
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setShowSettings(true);
+                    setTimeout(() => {
+                      const wsTabBtn = document.querySelector('[data-tab="workspaces"]') as HTMLButtonElement;
+                      if (wsTabBtn) wsTabBtn.click();
+                    }, 100);
+                  }}
+                  title="Novo Workspace"
+                  style={{
+                    background: 'linear-gradient(135deg, var(--primary), var(--primary-hover))', border: 'none', color: '#fff', 
+                    width: '38px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <input
                 type="text"
@@ -640,6 +782,23 @@ export function App() {
               ))
             )}
           </div>
+          
+          <div className="sidebar-footer" style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn-secondary" onClick={() => setShowSettings(true)} style={{ flex: 1, padding: '8px' }}>
+              <SettingsIcon size={14} /> Ajustes
+            </button>
+            <button 
+              className="btn-secondary" 
+              onClick={() => {
+                setToken('');
+                localStorage.removeItem('token');
+              }} 
+              style={{ padding: '8px', color: '#EF4444' }}
+              title="Sair"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
         </aside>
 
         {/* Editor & Content Panel */}
@@ -671,7 +830,7 @@ export function App() {
           {confirmDialog && (
             <div style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 999,
+              backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 99999,
               display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
               <div style={{
@@ -833,6 +992,19 @@ export function App() {
                       <option value={401}>401 Unauthorized</option>
                       <option value={404}>404 Not Found</option>
                       <option value={500}>500 Internal Server Error</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Workspace do Mock</label>
+                    <select
+                      className="form-control"
+                      value={formData.workspaceId || activeWorkspace?.id || ''}
+                      onChange={(e) => setFormData({ ...formData, workspaceId: e.target.value })}
+                    >
+                      {userWorkspaces.map(ws => (
+                        <option key={ws.id} value={ws.id}>{ws.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1070,6 +1242,39 @@ export function App() {
                     options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
                   />
                 </div>
+
+                <hr style={{ borderColor: 'var(--border-color)', margin: '14px 0' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>Gerador de Código (Snippets)</h4>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select 
+                      className="form-control" 
+                      style={{ width: '160px', height: '28px', fontSize: '0.75rem', padding: '0 8px' }}
+                      value={snippetLanguage}
+                      onChange={(e) => setSnippetLanguage(e.target.value)}
+                    >
+                      <option value="delphi">Delphi (REST Client)</option>
+                      <option value="curl">cURL</option>
+                      <option value="fetch">Fetch (JS)</option>
+                      <option value="axios">Axios (JS)</option>
+                      <option value="python">Python (Requests)</option>
+                    </select>
+                    <button className="btn-secondary btn-sm" onClick={copySnippet} style={{ padding: '0 8px', height: '28px' }}>
+                      <Copy size={14} /> Copiar
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ height: '180px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                  <Editor
+                    height="100%"
+                    language={snippetLanguage === 'python' ? 'python' : snippetLanguage === 'delphi' ? 'pascal' : snippetLanguage === 'curl' ? 'shell' : 'javascript'}
+                    theme="vs-dark"
+                    value={generateSnippet()}
+                    options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
+                  />
+                </div>
               </div>
             )}
 
@@ -1178,6 +1383,7 @@ export function App() {
           apiFetch={apiFetch} 
           showNotification={showNotification}
           setConfirmDialog={setConfirmDialog}
+          onWorkspacesChange={fetchCurrentUser}
         />
       )}
     </div>

@@ -44,6 +44,18 @@ export async function handleMockRequest(request: FastifyRequest, reply: FastifyR
     });
   }
 
+  // Verificar Segurança do Workspace
+  const workspace = await db.get('SELECT apiKey FROM workspaces WHERE id = ?', [matchedEndpoint.workspaceId]);
+  if (workspace && workspace.apiKey) {
+    const providedKey = request.headers['x-api-key'] || request.headers['authorization']?.replace('Bearer ', '');
+    if (providedKey !== workspace.apiKey) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'Este endpoint pertence a um Workspace protegido. Uma chave de API válida é necessária (X-Api-Key ou Authorization: Bearer).'
+      });
+    }
+  }
+
   const shouldSimulateError = matchedEndpoint.errorRate > 0 && (Math.random() * 100) < matchedEndpoint.errorRate;
 
   if (matchedEndpoint.delayMs > 0) {

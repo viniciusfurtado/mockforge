@@ -95,6 +95,13 @@ export async function getDb(): Promise<Database> {
     // Coluna ja existe
   }
 
+  // Migration for Workspace API Key
+  try {
+    await dbInstance.exec(`ALTER TABLE workspaces ADD COLUMN apiKey TEXT`);
+  } catch (e) {
+    // Coluna ja existe
+  }
+
   // Create default admin user
   const bcrypt = require('bcryptjs');
   const adminExists = await dbInstance.get('SELECT * FROM users WHERE email = ?', ['admin@mockforge.com']);

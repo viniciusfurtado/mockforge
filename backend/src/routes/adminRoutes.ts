@@ -180,6 +180,45 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const created = await db.get('SELECT * FROM workspaces WHERE id = ?', [wsId]);
     return reply.status(201).send(created);
   });
+
+  fastify.delete('/_admin/workspaces/:id', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { id } = request.params as any;
+
+    const membership = await db.get('SELECT role FROM workspace_members WHERE workspaceId = ? AND userId = ?', [id, request.user.id]);
+    if (!membership || (membership.role !== 'owner' && request.user.role !== 'admin')) {
+      return reply.status(403).send({ error: 'Acesso negado. Apenas o dono do workspace ou um Admin podem excluí-lo.' });
+    }
+
+    const defaultWsCount = await db.get('SELECT COUNT(*) as count FROM workspaces');
+    if (defaultWsCount && defaultWsCount.count <= 1) {
+      return reply.status(400).send({ error: 'Não é possível excluir o único workspace restante no sistema.' });
+    }
+
+    await db.run('DELETE FROM workspaces WHERE id = ?', [id]);
+    return reply.send({ success: true, message: 'Workspace excluído com sucesso.' });
+  });
+
+  fastify.post('/_admin/workspaces/:id/apikey', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { id } = request.params as any;
+    const { action } = request.body as any; // 'generate' or 'revoke'
+
+    const membership = await db.get('SELECT role FROM workspace_members WHERE workspaceId = ? AND userId = ?', [id, request.user.id]);
+    if (!membership || (membership.role !== 'owner' && request.user.role !== 'admin')) {
+      return reply.status(403).send({ error: 'Acesso negado.' });
+    }
+
+    if (action === 'revoke') {
+      await db.run('UPDATE workspaces SET apiKey = NULL WHERE id = ?', [id]);
+      return reply.send({ success: true, apiKey: null });
+    } else {
+      const newApiKey = 'mf_wk_' + randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '').substring(0, 16);
+      await db.run('UPDATE workspaces SET apiKey = ? WHERE id = ?', [newApiKey, id]);
+      return reply.send({ success: true, apiKey: newApiKey });
+    }
+  });
+
   // Listar todos os endpoints de um workspace
   fastify.get('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
@@ -278,16 +317,25 @@ export async function adminRoutes(fastify: FastifyInstance) {
       errorRate = existing.errorRate,
       schema = existing.schema,
       staticResponse = existing.staticResponse,
-      fieldOverrides = existing.fieldOverrides
+      fieldOverrides = existing.fieldOverrides,
+      workspaceId = existing.workspaceId
     } = body;
 
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const schemaString = typeof schema === 'string' ? schema : JSON.stringify(schema, null, 2);
     const overridesString = typeof fieldOverrides === 'string' ? fieldOverrides : JSON.stringify(fieldOverrides);
 
+    // Validar permissão no novo workspace caso tenha mudado
+    if (workspaceId !== existing.workspaceId) {
+      const membership = await db.get('SELECT role FROM workspace_members WHERE workspaceId = ? AND userId = ?', [workspaceId, request.user.id]);
+      if (!membership && request.user.role !== 'admin') {
+        return reply.status(403).send({ error: 'Acesso negado ao novo workspace de destino.' });
+      }
+    }
+
     await db.run(`
       UPDATE endpoints
-      SET name = ?, path = ?, method = ?, mode = ?, statusCode = ?, delayMs = ?, errorRate = ?, schema = ?, staticResponse = ?, fieldOverrides = ?, updatedAt = CURRENT_TIMESTAMP
+      SET name = ?, path = ?, method = ?, mode = ?, statusCode = ?, delayMs = ?, errorRate = ?, schema = ?, staticResponse = ?, fieldOverrides = ?, workspaceId = ?, updatedAt = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [
       name,
@@ -300,6 +348,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
       schemaString,
       typeof staticResponse === 'string' ? staticResponse : JSON.stringify(staticResponse),
       overridesString,
+      workspaceId,
       id
     ]);
 
