@@ -785,7 +785,7 @@ export function App() {
           
           <div className="sidebar-footer" style={{ display: 'flex', gap: '8px' }}>
             <button className="btn-secondary" onClick={() => setShowSettings(true)} style={{ flex: 1, padding: '8px' }}>
-              <SettingsIcon size={14} /> Ajustes
+              <SettingsIcon size={14} /> Ajustes & Conta
             </button>
             <button 
               className="btn-secondary" 
