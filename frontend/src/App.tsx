@@ -793,10 +793,10 @@ export function App() {
                 setToken('');
                 localStorage.removeItem('token');
               }} 
-              style={{ padding: '8px', color: '#EF4444' }}
+              style={{ padding: '8px', color: '#EF4444', display: 'flex', alignItems: 'center', gap: '6px' }}
               title="Sair"
             >
-              <LogOut size={14} />
+              <LogOut size={14} /> Sair
             </button>
           </div>
         </aside>
