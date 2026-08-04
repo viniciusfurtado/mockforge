@@ -159,10 +159,11 @@ export function App() {
     staticResponse: '{\n  "status": "success"\n}'
   });
 
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ msg: string; onConfirm: () => void } | null>(null);
 
-  const showNotification = (msg: string) => {
-    setNotification(msg);
+  const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
   };
 
@@ -285,7 +286,7 @@ export function App() {
 
   const handleSave = async () => {
     if (!formData.name || !formData.path || !formData.schema) {
-      showNotification('Preencha os campos obrigatórios!');
+      showNotification('Preencha os campos obrigatórios!', 'error');
       return;
     }
 
@@ -309,35 +310,39 @@ export function App() {
       if (!res.ok) throw new Error('Erro ao salvar endpoint');
       const saved = await res.json();
 
-      showNotification(selectedEndpoint?.id ? 'Mock atualizado com sucesso! ⚡' : 'Novo Mock criado com sucesso! 🚀');
+      showNotification(selectedEndpoint?.id ? 'Mock atualizado com sucesso! ⚡' : 'Novo Mock criado com sucesso! 🚀', 'success');
       await fetchEndpoints();
       selectEndpointItem(saved);
     } catch (err: any) {
-      showNotification(`Erro: ${err.message}`);
+      showNotification(`Erro: ${err.message}`, 'error');
     }
   };
 
   const handleDelete = async () => {
     if (!selectedEndpoint) return;
-    if (!confirm(`Deseja realmente apagar o mock "${selectedEndpoint.name}"?`)) return;
-
-    try {
-      await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}`, { method: 'DELETE' });
-      showNotification('Mock removido!');
-      setSelectedEndpoint(null);
-      await fetchEndpoints();
-    } catch (err: any) {
-      showNotification(`Erro ao deletar: ${err.message}`);
-    }
+    setConfirmDialog({
+      msg: `Deseja realmente apagar o mock "${selectedEndpoint.name}"?`,
+      onConfirm: async () => {
+        try {
+          await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}`, { method: 'DELETE' });
+          showNotification('Mock removido!', 'success');
+          setSelectedEndpoint(null);
+          await fetchEndpoints();
+        } catch (err: any) {
+          showNotification(`Erro ao deletar: ${err.message}`, 'error');
+        }
+      }
+    });
   };
 
   const handleResetState = async () => {
     if (!selectedEndpoint) return;
     try {
       await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}/reset-state`, { method: 'POST' });
-      showNotification('Massa de dados do SQLite resetada com sucesso! 🔄');
+      showNotification('Massa de dados do SQLite resetada com sucesso! 🔄', 'success');
+      fetchEndpoints();
     } catch (err: any) {
-      showNotification(`Erro ao resetar: ${err.message}`);
+      showNotification(`Erro ao resetar: ${err.message}`, 'error');
     }
   };
 
@@ -376,17 +381,20 @@ export function App() {
       ? `Deseja realmente limpar os logs do mock "${selectedEndpoint.name}"?`
       : 'Deseja realmente limpar TODOS os logs de telemetria?';
 
-    if (!confirm(confirmMsg)) return;
-
-    try {
-      const url = epId ? `${API_BASE}/_admin/logs?endpointId=${epId}` : `${API_BASE}/_admin/logs`;
-      await apiFetch(url, { method: 'DELETE' });
-      showNotification('Logs de telemetria limpos com sucesso! 🧹');
-      await fetchLogs();
-      await fetchStats();
-    } catch (err: any) {
-      showNotification(`Erro ao limpar logs: ${err.message}`);
-    }
+    setConfirmDialog({
+      msg: confirmMsg,
+      onConfirm: async () => {
+        try {
+          const url = epId ? `${API_BASE}/_admin/logs?endpointId=${epId}` : `${API_BASE}/_admin/logs`;
+          await apiFetch(url, { method: 'DELETE' });
+          showNotification('Logs de telemetria limpos com sucesso! 🧹', 'success');
+          await fetchLogs();
+          await fetchStats();
+        } catch (err: any) {
+          showNotification(`Erro ao limpar logs: ${err.message}`, 'error');
+        }
+      }
+    });
   };
 
   const executeTestRequest = async () => {
@@ -573,7 +581,7 @@ export function App() {
               position: 'absolute',
               top: '60px',
               right: '24px',
-              background: 'linear-gradient(135deg, #10B981, #059669)',
+              background: notification.type === 'success' ? 'linear-gradient(135deg, #10B981, #059669)' : 'linear-gradient(135deg, #EF4444, #B91C1C)',
               color: 'white',
               padding: '10px 20px',
               borderRadius: '8px',
@@ -585,8 +593,41 @@ export function App() {
               alignItems: 'center',
               gap: '8px'
             }}>
-              <CheckCircle2 size={17} />
-              {notification}
+              {notification.type === 'success' ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+              {notification.msg}
+            </div>
+          )}
+
+          {/* Confirm Dialog */}
+          {confirmDialog && (
+            <div style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 999,
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <div style={{
+                background: '#171717', border: '1px solid #262626',
+                borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '100%',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.75)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', color: '#f59e0b' }}>
+                  <AlertTriangle size={24} />
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, color: '#fff' }}>Confirmação</h3>
+                </div>
+                <p style={{ color: '#a3a3a3', marginBottom: '24px', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                  {confirmDialog.msg}
+                </p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button onClick={() => setConfirmDialog(null)} style={{
+                    padding: '8px 16px', background: 'transparent', border: '1px solid #404040',
+                    color: '#e5e5e5', borderRadius: '6px', cursor: 'pointer', fontWeight: 500
+                  }}>Cancelar</button>
+                  <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} style={{
+                    padding: '8px 16px', background: '#dc2626', border: 'none',
+                    color: 'white', borderRadius: '6px', cursor: 'pointer', fontWeight: 500
+                  }}>Confirmar</button>
+                </div>
+              </div>
             </div>
           )}
 
