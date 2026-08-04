@@ -59,14 +59,28 @@ flowchart TD
 
 ## 📦 Guía de Instalación
 
-### 1. Direct Pull de Docker Hub (Recomendado para Portainer / Producción)
+### 1. Direct Pull de Docker Hub (Recomendado)
 
+#### 🛡️ Imagen Multi-Tenant / Autenticada (Recomendado):
 ```bash
 docker run -d \
   -p 3001:3001 \
   -v $(pwd)/data:/app/data \
   --name mockforge \
-  devfurtado/mockforge:latest
+  devfurtado/mockforge:multi-tenant
+```
+
+> 🔑 **Credenciales Predeterminadas de Administración:**
+> - **Correo:** `admin@mockforge.com`
+> - **Contraseña:** `admin123` *(El administrador puede cambiar la contraseña y crear nuevos usuarios)*
+
+#### 🚀 Etiqueta Legada sin Autenticación:
+```bash
+docker run -d \
+  -p 3001:3001 \
+  -v $(pwd)/data:/app/data \
+  --name mockforge \
+  devfurtado/mockforge:v1.0.0
 ```
 
 #### En Portainer / Docker Compose Stack:
@@ -75,7 +89,7 @@ version: '3.8'
 
 services:
   mockforge:
-    image: devfurtado/mockforge:latest
+    image: devfurtado/mockforge:multi-tenant
     container_name: mockforge
     restart: unless-stopped
     ports:
