@@ -19,8 +19,10 @@ import {
   ChevronLeft,
   ChevronRight,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  Settings as SettingsIcon
 } from 'lucide-react';
+import { Settings } from './Settings';
 
 interface Endpoint {
   id: string;
@@ -52,6 +54,7 @@ interface Log {
   responseDelay: number;
   isSimulatedError: number;
   timestamp: string;
+  endpointId?: string;
 }
 
 interface SchemaField {
@@ -67,7 +70,7 @@ const PRESET_OPTIONS = [
   { value: 'auto', label: '🤖 Auto (Faker Inteligente)' },
   { value: 'cnpj_formatted', label: '🏢 CNPJ Formatado (00.000.000/0001-91)' },
   { value: 'cnpj_numeric', label: '🔢 CNPJ Numérico 14 Dígitos (00000000000191)' },
-  { value: 'cpf_formatted', label: '🆔 CPF Formatado (000.000.000-00)' },
+  { value: 'cpf_formatted', label: '🆔 CPF Formatado (00.000.000-00)' },
   { value: 'cpf_numeric', label: '🔢 CPF Numérico 11 Dígitos (00000000000)' },
   { value: 'numeric_string', label: '🔢 Apenas Números em String (Ex: "123456")' },
   { value: 'alphanumeric_code', label: '🔤 Código Alfanumérico (Ex: "PED123456")' },
@@ -161,6 +164,8 @@ export function App() {
 
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ msg: string; onConfirm: () => void } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
     setNotification({ msg, type });
@@ -206,9 +211,23 @@ export function App() {
     }
   };
 
+  const fetchCurrentUser = async () => {
+    if (!token) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/_admin/auth/me`);
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data.user);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar usuário logado:', err);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     
+    fetchCurrentUser();
     fetchEndpoints();
     fetchStats();
     fetchLogs();
@@ -444,6 +463,7 @@ export function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro no login');
       setToken(data.token);
+      setCurrentUser(data.user);
       localStorage.setItem('token', data.token);
     } catch (err: any) {
       setLoginError(err.message);
@@ -519,6 +539,9 @@ export function App() {
             <AlertTriangle size={14} style={{ color: stats.simulatedErrors > 0 ? '#EF4444' : undefined }} />
             <span>Erros Simulações: <strong>{stats.simulatedErrors}</strong></span>
           </div>
+          <button onClick={() => setShowSettings(true)} style={{ background: 'transparent', border: '1px solid #404040', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+            <SettingsIcon size={14} /> Ajustes
+          </button>
         </div>
       </header>
 
@@ -1100,6 +1123,17 @@ export function App() {
           </div>
         </main>
       </div>
+
+      {showSettings && currentUser && (
+        <Settings 
+          user={currentUser} 
+          token={token} 
+          onClose={() => setShowSettings(false)} 
+          apiFetch={apiFetch} 
+          showNotification={showNotification}
+          setConfirmDialog={setConfirmDialog}
+        />
+      )}
     </div>
   );
 }

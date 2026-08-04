@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import { adminRoutes } from './routes/adminRoutes';
+import { workspaceRoutes } from './routes/workspaceRoutes';
 import { handleMockRequest } from './engine/routeHandler';
 import { getDb } from './db/database';
 import { randomUUID } from 'crypto';
@@ -38,6 +39,7 @@ async function bootstrap() {
   await seedInitialData();
 
   await fastify.register(adminRoutes);
+  await fastify.register(workspaceRoutes);
 
   const publicPath = path.join(__dirname, '../public');
   if (fs.existsSync(publicPath)) {
