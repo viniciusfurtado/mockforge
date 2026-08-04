@@ -1,9 +1,185 @@
 import { FastifyInstance } from 'fastify';
+import bcrypt from 'bcryptjs';
 import { getDb } from '../db/database';
 import { generateMockFromTemplate, parseUserSchema, extractFieldsFromSchema } from '../engine/mockGenerator';
 import { randomUUID } from 'crypto';
 
 export async function adminRoutes(fastify: FastifyInstance) {
+  // 🔑 1. Autenticação & Gestão de Perfil
+  fastify.post('/_admin/auth/login', async (request, reply) => {
+    const db = await getDb();
+    const { email, password } = request.body as any;
+
+    if (!email || !password) {
+      return reply.status(400).send({ error: 'E-mail e senha são obrigatórios.' });
+    }
+
+    const user = await db.get('SELECT * FROM users WHERE email = ?', [email.trim().toLowerCase()]);
+    if (!user) {
+      return reply.status(401).send({ error: 'Credenciais inválidas.' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return reply.status(401).send({ error: 'Credenciais inválidas.' });
+    }
+
+    const workspaces = await db.all(`
+      SELECT w.*, wm.role as memberRole
+      FROM workspaces w
+      JOIN workspace_members wm ON w.id = wm.workspaceId
+      WHERE wm.userId = ?
+      ORDER BY w.createdAt ASC
+    `, [user.id]);
+
+    const token = (fastify as any).jwt.sign({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role
+    }, { expiresIn: '7d' });
+
+    return reply.send({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      workspaces
+    });
+  });
+
+  fastify.get('/_admin/auth/me', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const user = await db.get('SELECT id, name, email, role, createdAt FROM users WHERE id = ?', [request.user.id]);
+    if (!user) return reply.status(404).send({ error: 'Usuário não encontrado.' });
+
+    const workspaces = await db.all(`
+      SELECT w.*, wm.role as memberRole
+      FROM workspaces w
+      JOIN workspace_members wm ON w.id = wm.workspaceId
+      WHERE wm.userId = ?
+      ORDER BY w.createdAt ASC
+    `, [user.id]);
+
+    return reply.send({ user, workspaces });
+  });
+
+  fastify.post('/_admin/auth/change-password', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { currentPassword, newPassword } = request.body as any;
+
+    if (!currentPassword || !newPassword || newPassword.length < 6) {
+      return reply.status(400).send({ error: 'A nova senha deve possuir no mínimo 6 caracteres.' });
+    }
+
+    const user = await db.get('SELECT * FROM users WHERE id = ?', [request.user.id]);
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      return reply.status(400).send({ error: 'Senha atual incorreta.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.run('UPDATE users SET password = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [hashedPassword, request.user.id]);
+
+    return reply.send({ success: true, message: 'Senha alterada com sucesso.' });
+  });
+
+  // 👥 2. Gestão de Usuários (Apenas Admin)
+  fastify.get('/_admin/users', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    if (request.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Acesso negado. Requer perfil de Administrador.' });
+    }
+
+    const users = await db.all('SELECT id, name, email, role, createdAt FROM users ORDER BY createdAt DESC');
+    return users;
+  });
+
+  fastify.post('/_admin/users', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    if (request.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Acesso negado. Requer perfil de Administrador.' });
+    }
+
+    const { name, email, password, role = 'user' } = request.body as any;
+    if (!name || !email || !password) {
+      return reply.status(400).send({ error: 'Nome, e-mail e senha são obrigatórios.' });
+    }
+
+    const existing = await db.get('SELECT id FROM users WHERE email = ?', [email.trim().toLowerCase()]);
+    if (existing) {
+      return reply.status(400).send({ error: 'Já existe um usuário cadastrado com este e-mail.' });
+    }
+
+    const userId = randomUUID();
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.run(`
+      INSERT INTO users (id, name, email, password, role)
+      VALUES (?, ?, ?, ?, ?)
+    `, [userId, name, email.trim().toLowerCase(), hashedPassword, role]);
+
+    const defaultWs = await db.get('SELECT id FROM workspaces ORDER BY createdAt ASC LIMIT 1');
+    if (defaultWs) {
+      await db.run(`
+        INSERT OR IGNORE INTO workspace_members (id, workspaceId, userId, role)
+        VALUES (?, ?, ?, ?)
+      `, [randomUUID(), defaultWs.id, userId, 'member']);
+    }
+
+    const created = await db.get('SELECT id, name, email, role, createdAt FROM users WHERE id = ?', [userId]);
+    return reply.status(201).send(created);
+  });
+
+  fastify.delete('/_admin/users/:id', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    if (request.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Acesso negado. Requer perfil de Administrador.' });
+    }
+
+    const { id } = request.params as any;
+    if (id === request.user.id) {
+      return reply.status(400).send({ error: 'Não é possível remover o próprio usuário conectado.' });
+    }
+
+    await db.run('DELETE FROM users WHERE id = ?', [id]);
+    return reply.send({ success: true, message: 'Usuário removido.' });
+  });
+
+  // 🏢 3. Gestão de Workspaces
+  fastify.get('/_admin/workspaces', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const workspaces = await db.all(`
+      SELECT w.*, wm.role as memberRole
+      FROM workspaces w
+      JOIN workspace_members wm ON w.id = wm.workspaceId
+      WHERE wm.userId = ?
+      ORDER BY w.createdAt ASC
+    `, [request.user.id]);
+    return workspaces;
+  });
+
+  fastify.post('/_admin/workspaces', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { name, description } = request.body as any;
+    if (!name) return reply.status(400).send({ error: 'O nome do workspace é obrigatório.' });
+
+    const wsId = randomUUID();
+    await db.run(`
+      INSERT INTO workspaces (id, name, description, ownerId)
+      VALUES (?, ?, ?, ?)
+    `, [wsId, name, description || '', request.user.id]);
+
+    await db.run(`
+      INSERT INTO workspace_members (id, workspaceId, userId, role)
+      VALUES (?, ?, ?, ?)
+    `, [randomUUID(), wsId, request.user.id, 'owner']);
+
+    const created = await db.get('SELECT * FROM workspaces WHERE id = ?', [wsId]);
+    return reply.status(201).send(created);
+  });
   // Listar todos os endpoints
   fastify.get('/_admin/endpoints', async () => {
     const db = await getDb();
