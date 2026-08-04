@@ -206,7 +206,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Criar novo endpoint mockado
-  fastify.post('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.post('/_admin/endpoints', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
     const body = request.body as any;
     const id = randomUUID();
@@ -260,7 +260,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Atualizar endpoint
-  fastify.put('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.put('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     const body = request.body as any;
@@ -308,7 +308,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Deletar endpoint
-  fastify.delete('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.delete('/_admin/endpoints/:id', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     await db.run('DELETE FROM endpoints WHERE id = ?', [id]);
@@ -317,7 +317,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Extrair campos do Schema
-  fastify.post('/_admin/extract-fields', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.post('/_admin/extract-fields', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const { schema } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
 
@@ -327,7 +327,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Resetar estado de um endpoint Stateful
-  fastify.post('/_admin/endpoints/:id/reset-state', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.post('/_admin/endpoints/:id/reset-state', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
     const { id } = request.params as any;
     await db.run('DELETE FROM records WHERE endpointId = ?', [id]);
@@ -335,7 +335,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   });
 
   // Preview dinâmico
-  fastify.post('/_admin/preview', { preHandler: [(fastify as any).authenticate] }, async (request, reply) => {
+  fastify.post('/_admin/preview', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const { schema, count = 1, fieldOverrides = {} } = request.body as any;
     if (!schema) return reply.status(400).send({ error: 'O campo schema é obrigatório.' });
 
