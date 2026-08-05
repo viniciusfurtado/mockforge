@@ -5,6 +5,8 @@ import fastifyJwt from '@fastify/jwt';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
+import fastifyHelmet from '@fastify/helmet';
+import fastifyRateLimit from '@fastify/rate-limit';
 import { adminRoutes } from './routes/adminRoutes';
 import { workspaceRoutes } from './routes/workspaceRoutes';
 import { handleMockRequest } from './engine/routeHandler';
@@ -22,6 +24,26 @@ async function bootstrap() {
   await fastify.register(cors, {
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  });
+
+  // 🛡️ Segurança: Cabeçalhos HTTP seguros
+  await fastify.register(fastifyHelmet, {
+    global: true,
+    // Permite que o frontend (static) carregue recursos normalmente
+    contentSecurityPolicy: false,
+  });
+
+  // 🛡️ Segurança: Rate Limiting para evitar bots, crawlers e ataques de força bruta
+  await fastify.register(fastifyRateLimit, {
+    max: 150, // Limite de 150 requisições
+    timeWindow: '1 minute', // por minuto por IP
+    errorResponseBuilder: function (request, context) {
+      return {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Muitas requisições deste IP. Por favor, tente novamente em alguns instantes (Proteção Anti-Bot / DDoS ativada).'
+      }
+    }
   });
 
   await fastify.register(fastifyJwt, {
