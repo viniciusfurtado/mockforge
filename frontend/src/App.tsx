@@ -359,6 +359,21 @@ export function App() {
       case 'delphi':
         return `// Uses REST.Client, REST.Types, REST.Response.Adapter\nvar\n  Client: TRESTClient;\n  Request: TRESTRequest;\n  Response: TRESTResponse;\nbegin\n  Client := TRESTClient.Create('${url}');\n  Request := TRESTRequest.Create(nil);\n  Response := TRESTResponse.Create(nil);\n  try\n    Request.Client := Client;\n    Request.Response := Response;\n    Request.Method := rm${method};\n${body ? `    Request.AddBody('${body.replace(/'/g, "''").replace(/\n/g, '')}', ctAPPLICATION_JSON);\n` : ''}${activeWorkspace?.apiKey ? `    Request.AddParameter('X-Api-Key', '${activeWorkspace.apiKey}', pkHTTPHEADER, [poDoNotEncode]);\n` : ''}    Request.Execute;\n\n    if Response.StatusCode = 200 then\n      ShowMessage(Response.JSONText)\n    else\n      ShowMessage('Erro: ' + Response.StatusText);\n  finally\n    Response.Free;\n    Request.Free;\n    Client.Free;\n  end;\nend;`;
 
+      case 'java': {
+        const javaBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '');
+        return `import java.net.URI;\nimport java.net.http.HttpClient;\nimport java.net.http.HttpRequest;\nimport java.net.http.HttpResponse;\n\nHttpClient client = HttpClient.newHttpClient();\nHttpRequest request = HttpRequest.newBuilder()\n    .uri(URI.create("${url}"))\n    .header("Content-Type", "application/json")${activeWorkspace?.apiKey ? `\n    .header("X-Api-Key", "${activeWorkspace.apiKey}")` : ''}\n    .method("${method}", ${body ? `HttpRequest.BodyPublishers.ofString("${javaBody}")` : 'HttpRequest.BodyPublishers.noBody()'})\n    .build();\n\nHttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());\nSystem.out.println(response.body());`;
+      }
+
+      case 'php': {
+        const phpBody = body.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '');
+        return `<?php\n\n$ch = curl_init();\ncurl_setopt($ch, CURLOPT_URL, "${url}");\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\ncurl_setopt($ch, CURLOPT_CUSTOMREQUEST, "${method}");\n$headers = ["Content-Type: application/json"${activeWorkspace?.apiKey ? `, "X-Api-Key: ${activeWorkspace.apiKey}"` : ''}];\ncurl_setopt($ch, CURLOPT_HTTPHEADER, $headers);\n${body ? `curl_setopt($ch, CURLOPT_POSTFIELDS, '${phpBody}');\n` : ''}\n$response = curl_exec($ch);\ncurl_close($ch);\n\necho $response;`;
+      }
+
+      case 'csharp': {
+        const csharpBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '');
+        return `using System.Net.Http;\nusing System.Text;\n\nvar client = new HttpClient();\nvar request = new HttpRequestMessage(new HttpMethod("${method}"), "${url}");${activeWorkspace?.apiKey ? `\nrequest.Headers.Add("X-Api-Key", "${activeWorkspace.apiKey}");` : ''}${body ? `\nrequest.Content = new StringContent("${csharpBody}", Encoding.UTF8, "application/json");` : ''}\n\nvar response = await client.SendAsync(request);\nvar responseBody = await response.Content.ReadAsStringAsync();\nConsole.WriteLine(responseBody);`;
+      }
+
       default:
         return '';
     }
@@ -1259,6 +1274,9 @@ export function App() {
                       <option value="fetch">Fetch (JS)</option>
                       <option value="axios">Axios (JS)</option>
                       <option value="python">Python (Requests)</option>
+                      <option value="java">Java (HttpClient)</option>
+                      <option value="php">PHP (cURL)</option>
+                      <option value="csharp">C# (HttpClient)</option>
                     </select>
                     <button className="btn-secondary btn-sm" onClick={copySnippet} style={{ padding: '0 8px', height: '28px' }}>
                       <Copy size={14} /> Copiar
@@ -1269,7 +1287,7 @@ export function App() {
                 <div style={{ height: '180px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
-                    language={snippetLanguage === 'python' ? 'python' : snippetLanguage === 'delphi' ? 'pascal' : snippetLanguage === 'curl' ? 'shell' : 'javascript'}
+                    language={snippetLanguage === 'python' ? 'python' : snippetLanguage === 'delphi' ? 'pascal' : snippetLanguage === 'curl' ? 'shell' : snippetLanguage === 'java' ? 'java' : snippetLanguage === 'php' ? 'php' : snippetLanguage === 'csharp' ? 'csharp' : 'javascript'}
                     theme="vs-dark"
                     value={generateSnippet()}
                     options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
