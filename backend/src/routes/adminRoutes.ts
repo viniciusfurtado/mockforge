@@ -4,6 +4,43 @@ import { getDb } from '../db/database';
 import { generateMockFromTemplate, parseUserSchema, extractFieldsFromSchema } from '../engine/mockGenerator';
 import { randomUUID } from 'crypto';
 
+const MAX_ENDPOINT_VERSIONS = 20;
+
+// Grava o estado atual de um endpoint como uma nova versão no histórico e aplica a retenção
+async function snapshotEndpointVersion(db: any, endpoint: any, changedBy: string | null) {
+  const { version } = await db.get(
+    'SELECT COALESCE(MAX(version), 0) + 1 as version FROM endpoint_versions WHERE endpointId = ?',
+    [endpoint.id]
+  );
+
+  await db.run(`
+    INSERT INTO endpoint_versions (id, endpointId, version, name, path, method, mode, statusCode, delayMs, errorRate, schema, staticResponse, fieldOverrides, changedBy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    randomUUID(),
+    endpoint.id,
+    version,
+    endpoint.name,
+    endpoint.path,
+    endpoint.method,
+    endpoint.mode,
+    endpoint.statusCode,
+    endpoint.delayMs,
+    endpoint.errorRate,
+    endpoint.schema,
+    endpoint.staticResponse,
+    endpoint.fieldOverrides,
+    changedBy
+  ]);
+
+  await db.run(`
+    DELETE FROM endpoint_versions
+    WHERE endpointId = ? AND id NOT IN (
+      SELECT id FROM endpoint_versions WHERE endpointId = ? ORDER BY version DESC LIMIT ?
+    )
+  `, [endpoint.id, endpoint.id, MAX_ENDPOINT_VERSIONS]);
+}
+
 export async function adminRoutes(fastify: FastifyInstance) {
   // 🔑 1. Autenticação & Gestão de Perfil
   fastify.post('/_admin/auth/login', async (request, reply) => {
@@ -333,6 +370,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Guarda o estado anterior no histórico antes de sobrescrever
+    await snapshotEndpointVersion(db, existing, request.user.id);
+
     await db.run(`
       UPDATE endpoints
       SET name = ?, path = ?, method = ?, mode = ?, statusCode = ?, delayMs = ?, errorRate = ?, schema = ?, staticResponse = ?, fieldOverrides = ?, workspaceId = ?, updatedAt = CURRENT_TIMESTAMP
@@ -363,6 +403,67 @@ export async function adminRoutes(fastify: FastifyInstance) {
     await db.run('DELETE FROM endpoints WHERE id = ?', [id]);
     await db.run('DELETE FROM records WHERE endpointId = ?', [id]);
     return reply.send({ success: true, message: 'Endpoint removido.' });
+  });
+
+  // Listar histórico de versões de um endpoint
+  fastify.get('/_admin/endpoints/:id/versions', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { id } = request.params as any;
+
+    const versions = await db.all(`
+      SELECT ev.id, ev.version, ev.changedAt, ev.changedBy, u.name as changedByName
+      FROM endpoint_versions ev
+      LEFT JOIN users u ON ev.changedBy = u.id
+      WHERE ev.endpointId = ?
+      ORDER BY ev.version DESC
+    `, [id]);
+    return versions;
+  });
+
+  // Buscar snapshot completo de uma versão específica
+  fastify.get('/_admin/endpoints/:id/versions/:versionId', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { id, versionId } = request.params as any;
+
+    const version = await db.get('SELECT * FROM endpoint_versions WHERE id = ? AND endpointId = ?', [versionId, id]);
+    if (!version) return reply.status(404).send({ error: 'Versão não encontrada.' });
+    return version;
+  });
+
+  // Restaurar um endpoint para uma versão anterior
+  fastify.post('/_admin/endpoints/:id/versions/:versionId/restore', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { id, versionId } = request.params as any;
+
+    const existing = await db.get('SELECT * FROM endpoints WHERE id = ?', [id]);
+    if (!existing) return reply.status(404).send({ error: 'Endpoint não encontrado.' });
+
+    const version = await db.get('SELECT * FROM endpoint_versions WHERE id = ? AND endpointId = ?', [versionId, id]);
+    if (!version) return reply.status(404).send({ error: 'Versão não encontrada.' });
+
+    // Estado atual (pré-restore) também vira uma versão, para que o restore possa ser desfeito
+    await snapshotEndpointVersion(db, existing, request.user.id);
+
+    await db.run(`
+      UPDATE endpoints
+      SET name = ?, path = ?, method = ?, mode = ?, statusCode = ?, delayMs = ?, errorRate = ?, schema = ?, staticResponse = ?, fieldOverrides = ?, updatedAt = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [
+      version.name,
+      version.path,
+      version.method,
+      version.mode,
+      version.statusCode,
+      version.delayMs,
+      version.errorRate,
+      version.schema,
+      version.staticResponse,
+      version.fieldOverrides,
+      id
+    ]);
+
+    const updated = await db.get('SELECT * FROM endpoints WHERE id = ?', [id]);
+    return reply.send(updated);
   });
 
   // Extrair campos do Schema

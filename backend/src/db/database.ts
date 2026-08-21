@@ -86,6 +86,26 @@ export async function getDb(): Promise<Database> {
       FOREIGN KEY(workspaceId) REFERENCES workspaces(id) ON DELETE CASCADE,
       FOREIGN KEY(userId) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS endpoint_versions (
+      id TEXT PRIMARY KEY,
+      endpointId TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      path TEXT NOT NULL,
+      method TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      statusCode INTEGER NOT NULL,
+      delayMs INTEGER NOT NULL,
+      errorRate INTEGER NOT NULL,
+      schema TEXT NOT NULL,
+      staticResponse TEXT,
+      fieldOverrides TEXT,
+      changedBy TEXT,
+      changedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(endpointId) REFERENCES endpoints(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_endpoint_versions_endpointId ON endpoint_versions(endpointId);
   `);
 
   // Migration de seguranca caso a coluna fieldOverrides nao exista em bancos antigos

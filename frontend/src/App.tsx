@@ -68,6 +68,14 @@ interface SchemaField {
   detectedType: string;
 }
 
+interface EndpointVersion {
+  id: string;
+  version: number;
+  changedAt: string;
+  changedBy: string | null;
+  changedByName: string | null;
+}
+
 const API_BASE = '';
 
 const PRESET_OPTIONS = [
@@ -112,7 +120,8 @@ export function App() {
 
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | null>(null);
-  const [activeTab, setActiveTab] = useState<'config' | 'schema' | 'overrides' | 'playground' | 'logs'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'schema' | 'overrides' | 'playground' | 'logs' | 'versions'>('config');
+  const [versions, setVersions] = useState<EndpointVersion[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stats, setStats] = useState<Stats>({ totalEndpoints: 0, totalRequests: 0, simulatedErrors: 0, avgDelayMs: 0 });
   const [logs, setLogs] = useState<Log[]>([]);
@@ -122,6 +131,11 @@ export function App() {
 
   // Scroll Ref for Tabs
   const tabsScrollRef = useRef<HTMLDivElement>(null);
+
+  // Debounce do editor de schema + guarda contra respostas fora de ordem
+  const schemaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const extractRequestIdRef = useRef(0);
+  const previewRequestIdRef = useRef(0);
 
   // Extracted Schema Fields & Overrides
   const [extractedFields, setExtractedFields] = useState<SchemaField[]>([]);
@@ -137,6 +151,7 @@ export function App() {
   const [testResponse, setTestResponse] = useState('');
   const [testStatus, setTestStatus] = useState<number | null>(null);
   const [testTime, setTestTime] = useState<number>(0);
+  const [testResponseHeaders, setTestResponseHeaders] = useState<Record<string, string>>({});
   const [isTesting, setIsTesting] = useState(false);
   const [snippetLanguage, setSnippetLanguage] = useState('delphi');
 
@@ -235,6 +250,21 @@ export function App() {
     }
   };
 
+  const fetchVersions = async () => {
+    if (!token || !selectedEndpoint) {
+      setVersions([]);
+      return;
+    }
+    try {
+      const res = await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}/versions`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setVersions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Erro ao carregar histórico de versões:', err);
+    }
+  };
+
   const fetchCurrentUser = async () => {
     if (!token) return;
     try {
@@ -273,21 +303,44 @@ export function App() {
     return () => clearInterval(interval);
   }, [token, activeWorkspace]);
 
-  const extractSchemaFields = async (schemaText: string, currentOverrides?: Record<string, string>) => {
+  useEffect(() => {
+    if (activeTab === 'versions') {
+      fetchVersions();
+    }
+  }, [activeTab, selectedEndpoint?.id]);
+
+  // Cancela o debounce do editor de schema pendente ao trocar de endpoint/aba ou desmontar
+  useEffect(() => {
+    return () => {
+      if (schemaDebounceRef.current) {
+        clearTimeout(schemaDebounceRef.current);
+        schemaDebounceRef.current = null;
+      }
+    };
+  }, [selectedEndpoint?.id, activeTab]);
+
+  const extractSchemaFields = async (schemaText: string, currentOverrides?: Record<string, string>, autoPreview: boolean = false) => {
+    const requestId = ++extractRequestIdRef.current;
     try {
       const res = await apiFetch(`${API_BASE}/_admin/extract-fields`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schema: schemaText })
       });
+      if (requestId !== extractRequestIdRef.current) return; // resposta de uma edição anterior, descarta
       if (res.ok) {
         const fields: SchemaField[] = await res.json();
+        if (requestId !== extractRequestIdRef.current) return;
         setExtractedFields(fields);
         if (currentOverrides) {
           setFieldOverridesMap(currentOverrides);
         }
+        if (autoPreview) {
+          generatePreview(schemaText, previewCount, currentOverrides ?? fieldOverridesMap);
+        }
       }
     } catch (err) {
+      if (requestId !== extractRequestIdRef.current) return;
       console.error('Erro ao extrair campos do schema:', err);
     }
   };
@@ -469,7 +522,28 @@ export function App() {
     }
   };
 
+  const handleRestoreVersion = (version: EndpointVersion) => {
+    if (!selectedEndpoint) return;
+    setConfirmDialog({
+      msg: `Deseja restaurar o mock "${selectedEndpoint.name}" para a versão #${version.version}? O estado atual será salvo no histórico antes da restauração.`,
+      onConfirm: async () => {
+        try {
+          const res = await apiFetch(`${API_BASE}/_admin/endpoints/${selectedEndpoint.id}/versions/${version.id}/restore`, { method: 'POST' });
+          if (!res.ok) throw new Error('Erro ao restaurar versão');
+          const restored = await res.json();
+          showNotification(`Mock restaurado para a versão #${version.version}! ⏪`, 'success');
+          await fetchEndpoints();
+          selectEndpointItem(restored);
+          await fetchVersions();
+        } catch (err: any) {
+          showNotification(`Erro ao restaurar: ${err.message}`, 'error');
+        }
+      }
+    });
+  };
+
   const generatePreview = async (schemaToUse?: string, count: number = previewCount, overridesToUse?: Record<string, string>) => {
+    const requestId = ++previewRequestIdRef.current;
     try {
       const rawSchema = schemaToUse || formData.schema;
       const rawOverrides = overridesToUse || fieldOverridesMap;
@@ -479,8 +553,10 @@ export function App() {
         body: JSON.stringify({ schema: rawSchema, count, fieldOverrides: rawOverrides })
       });
       const data = await res.json();
+      if (requestId !== previewRequestIdRef.current) return; // resposta de uma chamada anterior, descarta
       setPreviewData(JSON.stringify(data, null, 2));
     } catch (err) {
+      if (requestId !== previewRequestIdRef.current) return;
       setPreviewData('// Erro ao gerar preview do modelo');
     }
   };
@@ -542,6 +618,7 @@ export function App() {
       const endTime = performance.now();
       setTestTime(Math.round(endTime - startTime));
       setTestStatus(res.status);
+      setTestResponseHeaders(Object.fromEntries(res.headers.entries()));
 
       const resData = await res.json().catch(() => ({ message: 'No JSON body returned' }));
       setTestResponse(JSON.stringify(resData, null, 2));
@@ -549,6 +626,7 @@ export function App() {
       fetchLogs();
     } catch (err: any) {
       setTestStatus(500);
+      setTestResponseHeaders({});
       setTestResponse(JSON.stringify({ error: err.message }, null, 2));
     } finally {
       setIsTesting(false);
@@ -911,6 +989,14 @@ export function App() {
               >
                 <Terminal size={15} /> Telemetria & Logs
               </button>
+              {selectedEndpoint && (
+                <button
+                  className={`tab-btn ${activeTab === 'versions' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('versions')}
+                >
+                  <Clock size={15} /> Histórico de Versões
+                </button>
+              )}
             </div>
 
             <button className="tab-nav-arrow" onClick={() => scrollTabs('right')} title="Rolar abas para direita">
@@ -1083,7 +1169,12 @@ export function App() {
                       onChange={(val) => {
                         const newSchema = val || '';
                         setFormData({ ...formData, schema: newSchema });
-                        extractSchemaFields(newSchema, fieldOverridesMap);
+                        if (schemaDebounceRef.current) {
+                          clearTimeout(schemaDebounceRef.current);
+                        }
+                        schemaDebounceRef.current = setTimeout(() => {
+                          extractSchemaFields(newSchema, fieldOverridesMap, true);
+                        }, 800);
                       }}
                       options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
                     />
@@ -1248,6 +1339,14 @@ export function App() {
                   )}
                 </div>
 
+                {Object.keys(testResponseHeaders).length > 0 && (
+                  <div className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '6px 0', lineHeight: 1.6 }}>
+                    {Object.entries(testResponseHeaders).map(([key, value]) => (
+                      <div key={key}><strong style={{ color: 'var(--text-main)' }}>{key}:</strong> {value}</div>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{ height: '240px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
@@ -1383,6 +1482,52 @@ export function App() {
                               </td>
                             </tr>
                           ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'versions' && (
+              <div className="card-panel">
+                <div>
+                  <h3 className="card-title"><Clock size={17} /> Histórico de Versões</h3>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Cada edição salva no mock gera uma versão anterior aqui. Restaure para recuperar de um edit acidental.
+                  </p>
+                </div>
+
+                <div style={{ overflowX: 'auto', marginTop: '8px' }}>
+                  <table className="logs-table">
+                    <thead>
+                      <tr>
+                        <th>Versão</th>
+                        <th>Data</th>
+                        <th>Alterado por</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {versions.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                            Nenhuma versão anterior registrada para este mock ainda.
+                          </td>
+                        </tr>
+                      ) : (
+                        versions.map((v) => (
+                          <tr key={v.id}>
+                            <td className="font-mono">#{v.version}</td>
+                            <td className="font-mono">{new Date(v.changedAt).toLocaleString()}</td>
+                            <td>{v.changedByName || '—'}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button className="btn-secondary btn-sm" onClick={() => handleRestoreVersion(v)}>
+                                <RotateCcw size={13} /> Restaurar
+                              </button>
+                            </td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>

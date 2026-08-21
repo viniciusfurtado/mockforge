@@ -2,8 +2,31 @@ import { FastifyInstance } from 'fastify';
 import { getDb } from '../db/database';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
+import { buildOpenApiSpec } from '../engine/openapiGenerator';
 
 export async function workspaceRoutes(fastify: FastifyInstance) {
+  // OpenAPI spec gerada a partir dos endpoints cadastrados no workspace
+  fastify.get('/_admin/workspaces/:wsId/openapi.json', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
+    const db = await getDb();
+    const { wsId } = request.params as any;
+
+    const workspace = await db.get('SELECT id, name, apiKey FROM workspaces WHERE id = ?', [wsId]);
+    if (!workspace) {
+      return reply.status(404).send({ error: 'Workspace não encontrado.' });
+    }
+
+    const membership = await db.get('SELECT role FROM workspace_members WHERE workspaceId = ? AND userId = ?', [wsId, request.user.id]);
+    if (!membership && request.user.role !== 'admin') {
+      return reply.status(403).send({ error: 'Acesso negado a este workspace.' });
+    }
+
+    const endpoints = await db.all('SELECT * FROM endpoints WHERE workspaceId = ?', [wsId]);
+    const baseUrl = `${request.protocol}://${request.hostname}`;
+    const spec = buildOpenApiSpec(workspace, endpoints, baseUrl);
+
+    return reply.send(spec);
+  });
+
   // Members of a workspace
   fastify.get('/_admin/workspaces/:wsId/members', { preHandler: [(fastify as any).authenticate] }, async (request: any, reply) => {
     const db = await getDb();
@@ -16,8 +39,8 @@ export async function workspaceRoutes(fastify: FastifyInstance) {
     }
 
     const members = await db.all(`
-      SELECT u.id, u.name, u.email, wm.role, wm.joinedAt 
-      FROM workspace_members wm 
+      SELECT u.id, u.name, u.email, wm.role, wm.createdAt
+      FROM workspace_members wm
       JOIN users u ON wm.userId = u.id 
       WHERE wm.workspaceId = ?
     `, [wsId]);
